@@ -49,7 +49,7 @@
   // ---------------------------------------------------------------------
   // Overlay UI — big countdown + status + running log
   // ---------------------------------------------------------------------
-  const OVERLAY_ID = 'pesrp-autologin-overlay';
+  const OVERLAY_ID = 'DTS-autologin-overlay';
   let logLines = [];
 
   function ensureOverlay() {

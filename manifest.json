@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "PESRP Dashboard Auto-Login",
+  "name": "DTS Dashboard Auto-Login",
   "version": "1.0.0",
   "description": "Auto-fills username/password and solves the simple math captcha on dashboard-tracking.punjab.gov.pk, then submits the login form.",
   "permissions": ["storage"],
@@ -13,7 +13,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "PESRP Auto-Login"
+    "default_title": "DTS Auto-Login"
   },
   "content_scripts": [
     {

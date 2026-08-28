@@ -1,6 +1,6 @@
-# PESRP Dashboard Auto-Login
+# DTS Dashboard Auto-Login
 
-> **Browser automation extension for the Punjab PESRP Dashboard**
+> **Browser automation extension for the Punjab DTS Dashboard**
 >
 > Automates scheduled dashboard login, simple arithmetic CAPTCHA solving, report retrieval, CSV synchronization to Google Sheets, network-aware retries, live run status, and optional phone notifications.
 
@@ -12,11 +12,11 @@
 
 ## 📌 Overview
 
-**PESRP Dashboard Auto-Login** is a lightweight browser extension designed to remove repetitive manual work from the PESRP Dashboard reporting workflow.
+**DTS Dashboard Auto-Login** is a lightweight browser extension designed to remove repetitive manual work from the DTS Dashboard reporting workflow.
 
 Once configured, the extension can:
 
-- Open the PESRP Dashboard automatically at scheduled times.
+- Open the DTS Dashboard automatically at scheduled times.
 - Fill the saved username and password.
 - Detect and solve the dashboard's simple arithmetic CAPTCHA.
 - Submit the login form automatically.
@@ -63,7 +63,7 @@ flowchart TD
     C --> D{User clicks Start?}
     D -- No --> E[Idle]
     D -- Yes --> F[Set flowStep = waiting]
-    F --> G[Open PESRP Dashboard Login Tab]
+    F --> G[Open DTS Dashboard Login Tab]
     G --> H[Wait for scheduled slot]
     H --> I[Open / process login page]
     I --> J[Fill Username + Password]
@@ -99,7 +99,7 @@ sequenceDiagram
     participant P as Extension Popup
     participant S as browser.storage.local
     participant C as Content Script
-    participant D as PESRP Dashboard
+    participant D as DTS Dashboard
     participant G as Google Apps Script
     participant H as Google Sheet
     participant N as ntfy.sh
@@ -134,7 +134,7 @@ sequenceDiagram
 Each scheduled run follows this general sequence:
 
 1. **Wait for the next scheduled slot.**
-2. **Open the PESRP Dashboard.**
+2. **Open the DTS Dashboard.**
 3. **Detect the login form.**
 4. **Fill username and password.**
 5. **Read the arithmetic CAPTCHA prompt.**
@@ -243,7 +243,7 @@ Open the extension popup and configure the following values.
 
 ### 1. Username
 
-The username used by the PESRP Dashboard login form.
+The username used by the DTS Dashboard login form.
 
 ### 2. Password
 
@@ -335,7 +335,7 @@ Instead, the integration is intentionally split into two parts:
 
 ```mermaid
 flowchart LR
-    A[PESRP Dashboard] -->|CSV| B[content.js]
+    A[DTS Dashboard] -->|CSV| B[content.js]
     B -->|HTTP POST| C[Google Apps Script Web App]
     C -->|Parse / validate| D[Google Sheet]
     D --> E[Optional downstream processing]
@@ -402,7 +402,7 @@ Then load the project as an unpacked extension.
 
 1. Install/load the extension.
 2. Open the extension popup.
-3. Enter your PESRP Dashboard username.
+3. Enter your DTS Dashboard username.
 4. Enter your password.
 5. Enter the deployed Google Apps Script Web App URL.
 6. Enter the shared secret if your Apps Script endpoint requires one.
@@ -417,7 +417,7 @@ The extension will:
 
 - Save the configuration.
 - Set the automation state to `waiting`.
-- Open a new PESRP Dashboard tab.
+- Open a new DTS Dashboard tab.
 - Wait for the next scheduled time.
 - Execute the login/report/synchronization workflow.
 
@@ -493,7 +493,7 @@ Then:
 
 1. Edit the source files.
 2. Reload the extension from the browser's extension manager.
-3. Open the PESRP Dashboard.
+3. Open the DTS Dashboard.
 4. Test the relevant workflow.
 5. Inspect the browser console and extension popup status.
 6. Verify the Google Apps Script response and spreadsheet update.
@@ -557,7 +557,7 @@ Before relying on the automation for production reporting, verify each layer ind
 
 ## ⚠️ Limitations
 
-1. **Dashboard dependency** — Changes to the PESRP login page, form IDs, CAPTCHA format, report URL, or authentication flow may require changes to `content.js`.
+1. **Dashboard dependency** — Changes to the DTS login page, form IDs, CAPTCHA format, report URL, or authentication flow may require changes to `content.js`.
 2. **CAPTCHA scope** — The solver only handles simple arithmetic CAPTCHA text; it is not intended for image, audio, or sophisticated anti-bot challenges.
 3. **Schedule is currently fixed** — The daily run times are defined in source code rather than configurable from the popup.
 4. **Browser storage is not encrypted by the application** — Protect the browser profile appropriately.
