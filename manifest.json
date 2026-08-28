@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "PESRP Dashboard Auto-Login",
+  "version": "1.0.0",
+  "description": "Auto-fills username/password and solves the simple math captcha on dashboard-tracking.punjab.gov.pk, then submits the login form.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://dashboard-tracking.punjab.gov.pk/*",
+    "https://script.google.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "PESRP Auto-Login"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://dashboard-tracking.punjab.gov.pk/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

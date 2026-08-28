@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>PESRP Auto-Login</title>
+<style>
+  body { font-family: system-ui, sans-serif; width: 300px; padding: 14px; }
+  h3 { margin: 0 0 10px; font-size: 15px; }
+  h4 { margin: 14px 0 6px; font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+  label { display: block; font-size: 12px; margin-top: 8px; color: #333; }
+  input { width: 100%; padding: 6px; box-sizing: border-box; margin-top: 2px; }
+  button { margin-top: 12px; width: 100%; padding: 8px; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  #status { margin-top: 8px; font-size: 12px; color: #16a34a; min-height: 14px; }
+  .row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .row input[type=checkbox] { width: auto; }
+  .hint { font-size: 11px; color: #666; margin-top: 10px; }
+  .statbox { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.6; }
+  .statbox .k { color: #64748b; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; color: #fff; }
+  .badge.on { background: #16a34a; }
+  .badge.off { background: #dc2626; }
+</style>
+</head>
+<body>
+  <h3>PESRP Dashboard Auto-Login</h3>
+  <label>Username
+    <input id="username" type="text" autocomplete="off">
+  </label>
+  <label>Password
+    <input id="password" type="password" autocomplete="off">
+  </label>
+  <label>Apps Script Web App URL
+    <input id="scriptUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+  </label>
+  <label>Shared Secret
+    <input id="secret" type="text" placeholder="same string as SHARED_SECRET in the script" autocomplete="off">
+  </label>
+  <label>ntfy.sh Topic (phone alerts)
+    <input id="ntfyTopic" type="text" placeholder="e.g. sheeraz-dengue-sync-x7f2" autocomplete="off">
+  </label>
+  <button id="save">Save Credentials</button>
+  <button id="start" style="background:#16a34a;">Start (schedule: 08:05\u201316:05)</button>
+  <button id="stop" style="background:#dc2626;">Stop</button>
+  <div id="status"></div>
+
+  <h4>Live Status</h4>
+  <div class="statbox">
+    <div><span class="k">Network:</span> <span id="netBadge" class="badge off">Checking…</span></div>
+    <div><span class="k">Flow step:</span> <span id="flowStepText">—</span></div>
+    <div><span class="k">Next run:</span> <span id="nextRunText">—</span></div>
+    <div><span class="k">Last success:</span> <span id="lastSuccessText">—</span></div>
+    <div><span class="k">Last error:</span> <span id="lastErrorText">—</span></div>
+  </div>
+
+  <div class="hint">Credentials are stored only in your browser's local extension storage. Click Start to arm the fixed schedule (08:05 AM through 04:05 PM, every 30 minutes) on the login tab that opens. If the network drops mid-run, it waits and resumes automatically once back online, then keeps following the same schedule.</div>
+</body>
+<script src="popup.js"></script>
+</html>
