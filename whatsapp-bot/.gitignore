@@ -1,0 +1,4 @@
+auth_info/
+.env
+cloudflare
+npm-debug.log*
