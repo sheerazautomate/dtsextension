@@ -3,7 +3,20 @@
   "name": "DTS Dashboard Auto-Login",
   "version": "1.0.0",
   "description": "Auto-fills username/password and solves the simple math captcha on dashboard-tracking.punjab.gov.pk, then submits the login form.",
-  "permissions": ["storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "dtsextension@sheerazautomate.github.io",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://dashboard-tracking.punjab.gov.pk/*",
     "https://script.google.com/*"
@@ -16,7 +29,9 @@
     "128": "icons/icon-128.png"
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "action": {
     "default_popup": "popup.html",
@@ -30,8 +45,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://dashboard-tracking.punjab.gov.pk/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://dashboard-tracking.punjab.gov.pk/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
