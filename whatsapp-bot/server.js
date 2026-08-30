@@ -6,22 +6,18 @@ const path = require('path');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 
-// ==== CONFIG ====
 const PORT = Number(process.env.PORT || 3000);
 const TEST_GROUP_JID = process.env.TEST_GROUP_JID || '120363412435970342@g.us';
 const SHARED_SECRET = process.env.SHARED_SECRET || 'blahblah';
-// ADMIN_SECRET should be different from SHARED_SECRET in production.
 const ADMIN_SECRET = process.env.ADMIN_SECRET || SHARED_SECRET;
 const LOCAL_PORT = Number(process.env.LOCAL_PORT || PORT);
 const TUNNEL_FILE = process.env.TUNNEL_FILE || path.join(__dirname, 'cloudflare');
-// =================
 
 let sock = null;
 let whatsappConnected = false;
 let botStarting = false;
 let lastWhatsAppEvent = null;
 let reconnects = 0;
-const startedAt = Date.now();
 
 function run(command, timeout = 10000) {
   return new Promise((resolve, reject) => {
@@ -31,36 +27,21 @@ function run(command, timeout = 10000) {
     });
   });
 }
-
 function humanUptime(seconds) {
   const d = Math.floor(seconds / 86400); seconds %= 86400;
   const h = Math.floor(seconds / 3600); seconds %= 3600;
   const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60);
   return `${d}d ${h}h ${m}m ${s}s`;
 }
-
-function memoryText() {
-  const used = (1 - os.freemem() / os.totalmem()) * 100;
-  return `${used.toFixed(0)}% used`;
-}
-
-async function diskText() {
-  try { const out = await run("df -h / | tail -1 | awk '{print $5}'"); return out || 'unknown'; }
-  catch { return 'unknown'; }
-}
-
+function memoryText() { return `${((1 - os.freemem() / os.totalmem()) * 100).toFixed(0)}% used`; }
+async function diskText() { try { return (await run("df -h / | tail -1 | awk '{print $5}'")) || 'unknown'; } catch { return 'unknown'; } }
 function readTunnelUrl() {
   try {
     const value = fs.readFileSync(TUNNEL_FILE, 'utf8').trim();
     return /^https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com\/?$/.test(value) ? value.replace(/\/$/, '') : value;
   } catch { return ''; }
 }
-
-async function pm2List() {
-  try { return JSON.parse(await run('pm2 jlist')); }
-  catch { return []; }
-}
-
+async function pm2List() { try { return JSON.parse(await run('pm2 jlist')); } catch { return []; } }
 async function findTunnelProcess() {
   const list = await pm2List();
   return list.find(p => /tunnel|cloudflared/i.test(`${p.name} ${p.pm2_env?.pm_exec_path || ''} ${p.pm2_env?.pm_cwd || ''}`));
@@ -73,12 +54,10 @@ async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     sock = makeWASocket({ auth: state, printQRInTerminal: false });
     whatsappConnected = false;
-
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
       lastWhatsAppEvent = new Date().toISOString();
       if (qr) qrcode.generate(qr, { small: true });
-
       if (connection === 'close') {
         whatsappConnected = false;
         const code = lastDisconnect?.error?.output?.statusCode;
@@ -94,37 +73,27 @@ async function startBot() {
         console.log('✅ Connected to WhatsApp');
       }
     });
-
     sock.ev.on('creds.update', saveCreds);
   } catch (err) {
     whatsappConnected = false;
     console.error('Baileys start error:', err);
     setTimeout(() => startBot(), 5000);
-  } finally {
-    botStarting = false;
-  }
+  } finally { botStarting = false; }
 }
-
 startBot();
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
 
-// ==== Existing webhook ====
+// Existing Apps Script webhook — intentionally unchanged.
 app.post('/send-file', async (req, res) => {
   try {
     const { secret, filename, base64, caption } = req.body;
     if (secret !== SHARED_SECRET) return res.status(401).json({ error: 'Unauthorized' });
     if (!filename || !base64) return res.status(400).json({ error: 'filename and base64 are required' });
     if (!sock || !whatsappConnected) return res.status(503).json({ error: 'WhatsApp not connected yet' });
-
     const buffer = Buffer.from(base64, 'base64');
-    await sock.sendMessage(TEST_GROUP_JID, {
-      document: buffer,
-      fileName: filename,
-      mimetype: 'application/pdf',
-      caption: caption || ''
-    });
+    await sock.sendMessage(TEST_GROUP_JID, { document: buffer, fileName: filename, mimetype: 'application/pdf', caption: caption || '' });
     console.log(`Sent ${filename} to ${TEST_GROUP_JID}`);
     res.json({ status: 'sent', filename });
   } catch (err) {
@@ -132,40 +101,31 @@ app.post('/send-file', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Existing lightweight health endpoint, retained for Apps Script/tunnel diagnostics.
 app.get('/health', (req, res) => res.json({ status: 'ok', connected: whatsappConnected }));
 
-// ==== Admin authentication ====
 function adminAuth(req, res, next) {
   const supplied = req.get('x-admin-secret') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!supplied || supplied !== ADMIN_SECRET) return res.status(401).json({ error: 'Admin authentication required' });
   next();
 }
-
 app.use('/admin/api', adminAuth);
 
 app.get('/admin/api/status', async (req, res) => {
   const disk = await diskText();
   const tunnelUrl = readTunnelUrl();
   const tunnelProc = await findTunnelProcess();
+  const pm2 = await pm2List();
   const checks = {
     'WhatsApp / Baileys': { ok: whatsappConnected },
     'Express API': { ok: true },
     'Tunnel URL': { ok: !!tunnelUrl, detail: tunnelUrl || 'not detected' },
     'Cloudflare process': { ok: !!tunnelProc, detail: tunnelProc?.name || 'not found' },
     'Auth session': { ok: fs.existsSync(path.join(__dirname, 'auth_info')) },
-    'PM2': { ok: (await pm2List()).length > 0 }
+    'PM2': { ok: pm2.length > 0 }
   };
   const failed = Object.values(checks).filter(x => !x.ok).length;
   const overall = failed === 0 ? { ok: true, label: 'ALL SYSTEMS OPERATIONAL' } : { ok: false, warning: failed < 3, label: `${failed} CHECK${failed > 1 ? 'S' : ''} NEED ATTENTION` };
-  res.json({
-    overall,
-    whatsapp: { connected: whatsappConnected, status: whatsappConnected ? 'Connected' : 'Disconnected', socket: !!sock, auth: fs.existsSync(path.join(__dirname, 'auth_info')), lastEvent: lastWhatsAppEvent },
-    tunnel: { connected: !!tunnelProc && !!tunnelUrl, url: tunnelUrl, process: tunnelProc?.name || null },
-    system: { node: process.version, uptimeHuman: humanUptime(process.uptime()), memory: memoryText(), disk, hostname: os.hostname(), platform: os.platform() },
-    checks
-  });
+  res.json({ overall, whatsapp: { connected: whatsappConnected, status: whatsappConnected ? 'Connected' : 'Disconnected', socket: !!sock, auth: fs.existsSync(path.join(__dirname, 'auth_info')), lastEvent: lastWhatsAppEvent }, tunnel: { connected: !!tunnelProc && !!tunnelUrl, url: tunnelUrl, process: tunnelProc?.name || null }, system: { node: process.version, uptimeHuman: humanUptime(process.uptime()), memory: memoryText(), disk, hostname: os.hostname(), platform: os.platform() }, checks });
 });
 
 app.get('/admin/api/diagnostics', async (req, res) => {
@@ -184,8 +144,7 @@ app.get('/admin/api/diagnostics', async (req, res) => {
   checks['Webhook health'] = { ok: true, detail: '/health is responding internally' };
   checks['Target group configured'] = { ok: /@g\.us$/.test(TEST_GROUP_JID), detail: TEST_GROUP_JID };
   checks['Apps Script configuration'] = { ok: !!process.env.APPS_SCRIPT_WEBAPP_URL || fs.existsSync(path.join(__dirname, 'tunnel.sh')), detail: process.env.APPS_SCRIPT_WEBAPP_URL ? 'environment variable' : 'tunnel.sh present' };
-  const total = Object.keys(checks).length;
-  const passed = Object.values(checks).filter(x => x.ok).length;
+  const total = Object.keys(checks).length; const passed = Object.values(checks).filter(x => x.ok).length;
   res.json({ ok: passed === total, passed, total, checks });
 });
 
@@ -209,20 +168,14 @@ app.post('/admin/api/bot/restart', async (req, res) => {
 });
 
 app.post('/admin/api/whatsapp/reconnect', async (req, res) => {
-  try {
-    if (sock) { try { sock.ws?.close(); } catch {} }
-    sock = null; whatsappConnected = false; reconnects = 0;
-    await startBot();
-    res.json({ ok: true, message: 'WhatsApp reconnect initiated' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  try { if (sock) { try { sock.ws?.close(); } catch {} } sock = null; whatsappConnected = false; reconnects = 0; await startBot(); res.json({ ok: true, message: 'WhatsApp reconnect initiated' }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/admin/api/groups', async (req, res) => {
   if (!sock || !whatsappConnected) return res.status(503).json({ error: 'WhatsApp is not connected' });
-  try {
-    const groups = await sock.groupFetchAllParticipating();
-    res.json({ groups: Object.entries(groups).map(([id, g]) => ({ id, name: g.subject || id })).sort((a,b) => a.name.localeCompare(b.name)) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  try { const groups = await sock.groupFetchAllParticipating(); res.json({ groups: Object.entries(groups).map(([id, g]) => ({ id, name: g.subject || id })).sort((a,b) => a.name.localeCompare(b.name)) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/admin/api/test-message', async (req, res) => {
@@ -236,34 +189,25 @@ app.get('/admin/api/tunnel', async (req, res) => {
   const proc = await findTunnelProcess();
   res.json({ connected: !!proc && !!readTunnelUrl(), url: readTunnelUrl(), process: proc?.name || null, localTarget: `http://localhost:${LOCAL_PORT}` });
 });
-
 app.post('/admin/api/tunnel/restart', async (req, res) => {
   const proc = await findTunnelProcess();
-  if (proc) {
-    try { await run(`pm2 restart ${JSON.stringify(proc.name)}`); return res.json({ ok: true, message: `Tunnel process ${proc.name} restarted` }); }
-    catch (e) { return res.status(500).json({ error: e.stderr || e.message }); }
-  }
-  try {
-    const child = spawn('bash', [path.join(__dirname, 'tunnel.sh')], { cwd: __dirname, detached: true, stdio: 'ignore' });
-    child.unref();
-    res.json({ ok: true, message: 'Started tunnel.sh directly because no PM2 tunnel process was found' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  if (proc) { try { await run(`pm2 restart ${JSON.stringify(proc.name)}`); return res.json({ ok: true, message: `Tunnel process ${proc.name} restarted` }); } catch (e) { return res.status(500).json({ error: e.stderr || e.message }); } }
+  try { const child = spawn('bash', [path.join(__dirname, 'tunnel.sh')], { cwd: __dirname, detached: true, stdio: 'ignore' }); child.unref(); res.json({ ok: true, message: 'Started tunnel.sh directly because no PM2 tunnel process was found' }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 async function reportTunnelUrl(url) {
   const endpoint = process.env.APPS_SCRIPT_WEBAPP_URL;
   const secret = process.env.URL_UPDATE_SECRET;
-  if (!endpoint || !secret) throw new Error('Set APPS_SCRIPT_WEBAPP_URL and URL_UPDATE_SECRET in the bot environment for manual tunnel reporting');
+  if (!endpoint || !secret) throw new Error('Set APPS_SCRIPT_WEBAPP_URL and URL_UPDATE_SECRET in the bot PM2 environment for manual tunnel reporting');
   const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret, url }) });
   if (!r.ok) throw new Error(`Apps Script returned HTTP ${r.status}`);
   return r.json().catch(() => ({}));
 }
-
 app.post('/admin/api/tunnel/report', async (req, res) => {
   try { const url = readTunnelUrl(); if (!url) throw new Error('No tunnel URL detected'); await reportTunnelUrl(url); res.json({ ok: true, message: `Reported ${url} to Apps Script` }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
-
 app.post('/admin/api/tunnel/manual-url', async (req, res) => {
   const url = String(req.body?.url || '').trim().replace(/\/$/, '');
   if (!/^https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com$/.test(url)) return res.status(400).json({ error: 'Enter a valid trycloudflare.com URL' });
@@ -272,13 +216,8 @@ app.post('/admin/api/tunnel/manual-url', async (req, res) => {
 });
 
 app.get('/admin/api/logs', async (req, res) => {
-  try {
-    const pm2 = await pm2List();
-    const self = pm2.find(p => /whatsapp|server\.js/i.test(`${p.name} ${p.pm2_env?.pm_exec_path || ''}`));
-    if (!self) return res.json({ logs: 'No WhatsApp PM2 process identified.' });
-    const logs = await run(`pm2 logs ${JSON.stringify(self.name)} --lines 120 --nostream`, 15000);
-    res.json({ logs });
-  } catch (e) { res.status(500).json({ error: e.stderr || e.message }); }
+  try { const pm2 = await pm2List(); const self = pm2.find(p => /whatsapp|server\.js/i.test(`${p.name} ${p.pm2_env?.pm_exec_path || ''}`)); if (!self) return res.json({ logs: 'No WhatsApp PM2 process identified.' }); const logs = await run(`pm2 logs ${JSON.stringify(self.name)} --lines 120 --nostream`, 15000); res.json({ logs }); }
+  catch (e) { res.status(500).json({ error: e.stderr || e.message }); }
 });
 
 app.post('/admin/api/repair', async (req, res) => {
@@ -292,7 +231,8 @@ app.post('/admin/api/repair', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.use('/admin', express.static(__dirname));
+// Serve only the two intended admin assets. Never expose auth_info, scripts or config files.
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
+app.get('/admin/admin.js', (req, res) => res.sendFile(path.join(__dirname, 'admin.js')));
 
 app.listen(PORT, () => console.log(`Webhook + Admin server listening on port ${PORT}`));
