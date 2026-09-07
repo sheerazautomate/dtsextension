@@ -5,3 +5,7 @@ cloudflare
 get groups
 .env
 .env.local
+scheduled_messages.json
+chat_history.json
+known_contacts.json
+scheduled-attachments/

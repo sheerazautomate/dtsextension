@@ -342,6 +342,8 @@ LOCAL_PORT=3000
 ```bash
 cd whatsapp-bot
 npm install
+# Copy .env.example to .env and fill in your values:
+cp .env.example .env
 node server.js        # production entry point (Baileys + webhook)
 # or, for first-time pairing / debugging only:
 node index.js
@@ -355,6 +357,9 @@ chmod +x tunnel.sh
 pm2 start tunnel.sh --name dts-tunnel
 pm2 start server.js --name dts-whatsapp-bot
 ```
+
+> **`tunnel.sh` requires `jq`** for parsing JSON responses from Apps Script.
+> Install it with: `sudo apt install jq` (Debian/Ubuntu) or `brew install jq` (macOS).
 
 To find a group's JID (for updating `TEST_GROUP_JID`):
 ```bash

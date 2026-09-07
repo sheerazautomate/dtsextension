@@ -37,7 +37,7 @@ export default function Page() {
       )}
 
       <div className="panel-grid">
-        <TunnelPanel tunnel={data?.tunnel} />
+        <TunnelPanel tunnel={data?.tunnel} bot={data?.bot} />
         <BotPanel bot={data?.bot} />
         <ExtensionPanel extension={data?.extension} />
       </div>

@@ -6,11 +6,14 @@
   const RETRY_BACKOFF_MS = 5000;
   const MAX_RETRY_BACKOFF_MS = 30000;
 
-  // Fixed daily schedule: 08:05 through 16:05, every 30 minutes.
-  const SCHEDULE_TIMES = [
+  // Default schedule (used when no custom schedule is stored)
+  const DEFAULT_SCHEDULE_TIMES = [
     '08:05', '08:35', '09:05', '09:35', '10:05', '10:35', '11:05', '11:35',
     '12:05', '12:35', '13:05', '13:35', '14:05', '14:35', '15:05', '15:35', '16:05'
   ];
+
+  // Cached schedule times, loaded from storage on init and refreshed on storage change
+  let scheduleTimes = [...DEFAULT_SCHEDULE_TIMES];
 
   const LOGIN_URL = 'https://dashboard-tracking.punjab.gov.pk/';
   const REPORT_URL =
@@ -22,8 +25,17 @@
   // ---------------------------------------------------------------------
   // Schedule helpers
   // ---------------------------------------------------------------------
+  async function loadScheduleTimes() {
+    const data = await browser.storage.local.get(['scheduleTimes']);
+    if (Array.isArray(data.scheduleTimes) && data.scheduleTimes.length > 0) {
+      scheduleTimes = [...data.scheduleTimes].sort();
+    } else {
+      scheduleTimes = [...DEFAULT_SCHEDULE_TIMES];
+    }
+  }
+
   function getNextScheduledTime(fromDate) {
-    for (const t of SCHEDULE_TIMES) {
+    for (const t of scheduleTimes) {
       const [h, m] = t.split(':').map(Number);
       const candidate = new Date(
         fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), h, m, 0, 0
@@ -271,8 +283,11 @@
   pushHeartbeat();
 
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.flowStep) return;
-    if (changes.flowStep.newValue === 'idle') {
+    if (area !== 'local') return;
+    if (changes.scheduleTimes) {
+      loadScheduleTimes(); // refresh cache when schedule is updated in settings
+    }
+    if (changes.flowStep && changes.flowStep.newValue === 'idle') {
       stopCountdown();
       setCountdownText('⏸');
       setStatus('Stopped', 'Do your manual work, then click Start to resume the schedule.');
@@ -512,8 +527,11 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runFlow);
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadScheduleTimes();
+      runFlow();
+    });
   } else {
-    runFlow();
+    loadScheduleTimes().then(() => runFlow());
   }
 })();
