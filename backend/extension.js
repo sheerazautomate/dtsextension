@@ -5,21 +5,19 @@
  *   Who has access: Anyone
  * Copy the resulting /exec URL into the Firefox extension popup.
  *
- * Set SHEET_ID and SHEET_NAME below, and pick your own SHARED_SECRET
- * (any random string) — the extension must send the same value.
+ * SHEET_ID, SHARED_SECRET, and NTFY_TOPIC come from Script properties.
+ * See backend/SCRIPT_PROPERTIES.example. The extension popup must send the
+ * same SHARED_SECRET value.
  */
 
-const SHEET_ID = '1-U1Mw4HJ0reauq4Xe_iDxyFsqN8xZmxqChFrXE7gfiA';
 const SHEET_NAME = 'dts'; // tab name to write into
 const STAMP_SHEET_NAME = 'Schoolwise';
 const STAMP_CELL = 'E1';
-const SHARED_SECRET = 'blahblah';
-const NTFY_TOPIC = 'dts'; // e.g. 'sheeraz-dengue-sync-x7f2' — pick something hard to guess
 
 function handleDtsCsvUpload(e) {
   try {
     const params = e.parameter || {};
-    if (params.secret !== SHARED_SECRET) {
+    if (!secretsMatch_(scriptProp_('SHARED_SECRET'), params.secret)) {
       return jsonResponse({ ok: false, error: 'Unauthorized' }, 401);
     }
 
@@ -30,7 +28,7 @@ function handleDtsCsvUpload(e) {
 
     const rows = Utilities.parseCsv(csvText);
 
-    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const ss = SpreadsheetApp.openById(requireScriptProp_('SHEET_ID'));
     let sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) {
       sheet = ss.insertSheet(SHEET_NAME);
@@ -86,9 +84,10 @@ function handleDtsCsvUpload(e) {
 }
 
 function notify(title, message, priority) {
-  if (!NTFY_TOPIC || NTFY_TOPIC.indexOf('PASTE_') === 0) return; // not configured yet
+  var topic = scriptProp_('NTFY_TOPIC');
+  if (!topic || topic.indexOf('PASTE_') === 0) return; // not configured yet
   try {
-    UrlFetchApp.fetch('https://ntfy.sh/' + NTFY_TOPIC, {
+    UrlFetchApp.fetch('https://ntfy.sh/' + topic, {
       method: 'post',
       contentType: 'text/plain; charset=utf-8',
       payload: message,

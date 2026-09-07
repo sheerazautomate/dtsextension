@@ -4,12 +4,22 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const qrcode = require('qrcode-terminal');
 const initScheduler = require('./scheduler'); // ADDED
 
-// ==== CONFIG ====
+function requiredEnv(name) {
+  const v = process.env[name];
+  if (!v || !String(v).trim()) {
+    throw new Error(
+      `Missing required environment variable ${name}. Copy whatsapp-bot/.env.example to .env and fill it in.`
+    );
+  }
+  return String(v).trim();
+}
+
+// ==== CONFIG (no secrets in source — see .env.example / SECURITY.md) ====
 const PORT = process.env.PORT || 3000;
-const TEST_GROUP_JID = process.env.WHATSAPP_GROUP_JID || '923457620174-1511031682@g.us'; // "DEA" group
-const SHARED_SECRET = process.env.WHATSAPP_SHARED_SECRET || 'arsh7999'; // gates /send-file
-const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';       // central hub, for heartbeats/commands
-const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || ''; // must match Code.gs SHARED_SECRET
+const TEST_GROUP_JID = requiredEnv('WHATSAPP_GROUP_JID');
+const SHARED_SECRET = requiredEnv('WHATSAPP_SHARED_SECRET');
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
+const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || '';
 const HEARTBEAT_INTERVAL_MS = 15000;
 const EVENT_BUFFER_SIZE = 50;
 const RECONNECT_BASE_DELAY_MS = 3000;   // initial reconnect delay

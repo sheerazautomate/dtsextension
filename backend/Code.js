@@ -9,10 +9,9 @@ function doGet(e) {
       .setHeight(600);
 }
 
-// ==== ADD THIS CONFIG NEAR THE TOP OF YOUR SCRIPT ====
-var WHATSAPP_SHARED_SECRET = 'blahblah'; // must match server.js
-// NOTE: webhook URL is no longer hardcoded — it's read dynamically via getWhatsAppWebhookUrl()
-// from whatsapp-url-registry.gs, which is kept up to date by the Linux-side updater script.
+// WHATSAPP_SHARED_SECRET and DRIVE_* folder IDs are Script properties.
+// See backend/SCRIPT_PROPERTIES.example. Webhook URL is read dynamically
+// via getWhatsAppWebhookUrl() from waUrlRegistry.js.
 
 function openDashboard() {
   var html = HtmlService.createHtmlOutputFromFile('Dashboard')
@@ -66,7 +65,7 @@ function sendPdfToWhatsApp(pdfFile) {
     var base64 = Utilities.base64Encode(bytes);
 
     var payload = {
-      secret: WHATSAPP_SHARED_SECRET,
+      secret: requireScriptProp_('WHATSAPP_SHARED_SECRET'),
       filename: pdfFile.getName(),
       base64: base64,
       caption: pdfFile.getName().replace('.pdf', '')
@@ -142,7 +141,7 @@ function ChaubaraMale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Chaubara Male.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Chaubara Male.pdf');
@@ -206,7 +205,7 @@ function ChaubaraFemale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Chaubara Female.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Chaubara Female.pdf');
@@ -270,7 +269,7 @@ function KarorMale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Karor Male.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Karor Male.pdf');
@@ -335,7 +334,7 @@ function KarorFemale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Karor Female.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Karor Female.pdf');
@@ -399,7 +398,7 @@ function LayyahMale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Layyah Male.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Layyah Male.pdf');
@@ -464,7 +463,7 @@ function LayyahFemale() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Layyah Female.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Layyah Female.pdf');
@@ -527,7 +526,7 @@ function SecondaryWing() {
 
   // Save the PDF to Drive
   var pdfBlob = response.getBlob().setName('Secondary Wing.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var files = folder.getFilesByName('Secondary Wing.pdf');
@@ -572,7 +571,7 @@ function exportSummaryToPDF() {
 
   // Save the PDF to Drive
   var summaryPdfBlob = summaryResponse.getBlob().setName('Summary.pdf');
-  var folder = DriveApp.getFolderById('1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8'); // Your Folder ID
+  var folder = DriveApp.getFolderById(requireScriptProp_('DRIVE_PDF_FOLDER_ID'));
   
   // Delete previous files with the same name
   var summaryFiles = folder.getFilesByName('Summary.pdf');
@@ -589,7 +588,7 @@ function exportSummaryToPDF() {
 }
 
 function uploadCSVToDrive(data) {
-  const FOLDER_ID = '1Qyc0hRmk-9-o_R2jTytimUj7haAayV5R';
+  const FOLDER_ID = requireScriptProp_('DRIVE_CSV_FOLDER_ID');
 
   try {
     if (!data || !data.base64) throw new Error('No file data received.');

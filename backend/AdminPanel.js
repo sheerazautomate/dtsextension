@@ -4,14 +4,14 @@
  * couple of small edits in each. See ADMIN_PANEL_SETUP.md for exactly what
  * changed and why.
  *
- * Uses its own secret (ADMIN_PANEL_SECRET) — deliberately NOT reusing
- * SHARED_SECRET (extension.js), WHATSAPP_SHARED_SECRET (Code.js), or
- * URL_UPDATE_SECRET (waUrlRegistry.js), since Apps Script merges top-level
- * `var`/`const` across all files in a project into one global scope —
- * reusing one of those names would silently collide with the existing one.
+ * ADMIN_PANEL_SECRET is a Script property (see config.js / SCRIPT_PROPERTIES.example).
+ * The property name is different from SHARED_SECRET / WHATSAPP_SHARED_SECRET /
+ * URL_UPDATE_SECRET so Apps Script's shared global scope cannot collide.
  */
 
-var ADMIN_PANEL_SECRET = 'arsh7999'; // must match bot/tunnel.sh/extension/admin panel
+function AdminPanel_secret_() {
+  return scriptProp_('ADMIN_PANEL_SECRET');
+}
 
 var ADMIN_EVENT_LOG_SHEET = 'AdminEventLog';
 var ADMIN_MAX_EVENTS = 100;
@@ -19,7 +19,7 @@ var ADMIN_MAX_EVENTS = 100;
 // ===================== Entry points called from doGet / doPost =====================
 
 function AdminPanel_handleGet_(e) {
-  if (e.parameter.secret !== ADMIN_PANEL_SECRET) {
+  if (!secretsMatch_(AdminPanel_secret_(), e.parameter.secret)) {
     return AdminPanel_json_({ ok: false, error: 'unauthorized' });
   }
   return AdminPanel_json_(AdminPanel_getStatus_());
@@ -33,7 +33,7 @@ function AdminPanel_handlePost_(e, action) {
     return AdminPanel_json_({ ok: false, error: 'invalid JSON body' });
   }
 
-  if (body.secret !== ADMIN_PANEL_SECRET) {
+  if (!secretsMatch_(AdminPanel_secret_(), body.secret)) {
     return AdminPanel_json_({ ok: false, error: 'unauthorized' });
   }
 

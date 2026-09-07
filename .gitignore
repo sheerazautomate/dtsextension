@@ -5,9 +5,11 @@ node_modules/
 .next/
 dist/
 
-# Environment files
+# Environment / secrets — keep *.example files
 .env
-.env.local
+.env.*
+!.env.example
+!.env.*.example
 
 # OS files
 .DS_Store
@@ -32,3 +34,17 @@ npm-debug.log*
 # Temporary
 .tmp/
 *.tmp
+
+# clasp local project id (use .clasp.json.example)
+.clasp.json
+
+# WhatsApp session keys — never commit these
+whatsapp-bot/auth_info/
+
+# Bot runtime / PII
+whatsapp-bot/chat_history.json
+whatsapp-bot/known_contacts.json
+whatsapp-bot/scheduled_messages.json
+whatsapp-bot/scheduled-attachments/
+whatsapp-bot/cloudflare
+whatsapp-bot/get groups

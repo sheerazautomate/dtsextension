@@ -1,12 +1,11 @@
 // ==== URL REGISTRY: receives tunnel URL updates from the Linux box ====
-
-var URL_UPDATE_SECRET = 'blahblah'; // separate from WHATSAPP_SHARED_SECRET
+// URL_UPDATE_SECRET is a Script property — see backend/SCRIPT_PROPERTIES.example.
 
 function handleUrlRegistryUpdate(e) {
   try {
     var body = JSON.parse(e.postData.contents);
 
-    if (body.secret !== URL_UPDATE_SECRET) {
+    if (!secretsMatch_(scriptProp_('URL_UPDATE_SECRET'), body.secret)) {
       return ContentService.createTextOutput(JSON.stringify({ error: 'Unauthorized' }))
         .setMimeType(ContentService.MimeType.JSON);
     }

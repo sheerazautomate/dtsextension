@@ -41,9 +41,9 @@ fi
 # They are different secrets on purpose. If the log says "Reported URL" but the
 # admin panel never changes, read the curl response — a secret mismatch comes
 # back as {"error":"Unauthorized"}.
-APPS_SCRIPT_WEBAPP_URL="${APPS_SCRIPT_WEBAPP_URL:-${APPS_SCRIPT_URL:-https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec}}"
-APPS_SCRIPT_SECRET="${APPS_SCRIPT_SECRET:-arsh7999}"
-URL_UPDATE_SECRET="${URL_UPDATE_SECRET:-${APPS_SCRIPT_SECRET}}"
+APPS_SCRIPT_WEBAPP_URL="${APPS_SCRIPT_WEBAPP_URL:-${APPS_SCRIPT_URL:-}}"
+APPS_SCRIPT_SECRET="${APPS_SCRIPT_SECRET:-}"
+URL_UPDATE_SECRET="${URL_UPDATE_SECRET:-}"
 LOCAL_PORT="${LOCAL_PORT:-${PORT:-3000}}"
 COMMAND_POLL_INTERVAL="${COMMAND_POLL_INTERVAL:-10}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-300}"          # re-report URL every 5 minutes
@@ -63,9 +63,23 @@ LAST_HEARTBEAT=0
 LAST_HEALTH_CHECK=0
 LAST_RESTART_AT=0
 
+<<<<<<< HEAD
 if echo "$APPS_SCRIPT_WEBAPP_URL" | grep -q 'YOUR_DEPLOYMENT_ID'; then
   echo "WARNING: APPS_SCRIPT_WEBAPP_URL is still the placeholder."
   echo "         Set APPS_SCRIPT_URL in whatsapp-bot/.env (or edit this script)."
+=======
+if [ -z "$APPS_SCRIPT_WEBAPP_URL" ] || echo "$APPS_SCRIPT_WEBAPP_URL" | grep -q 'YOUR_DEPLOYMENT_ID'; then
+  echo "ERROR: APPS_SCRIPT_URL is not set. Copy .env.example to .env and fill it in."
+  exit 1
+fi
+if [ -z "$APPS_SCRIPT_SECRET" ]; then
+  echo "ERROR: APPS_SCRIPT_SECRET is not set. Copy .env.example to .env and fill it in."
+  exit 1
+fi
+if [ -z "$URL_UPDATE_SECRET" ]; then
+  echo "ERROR: URL_UPDATE_SECRET is not set. It must match the Apps Script URL_UPDATE_SECRET property."
+  exit 1
+>>>>>>> e43be23 (Stop tracking secrets, session files, and hard-coded credentials)
 fi
 
 report_url() {

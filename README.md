@@ -213,10 +213,9 @@ dtsextension/
     ├── get-groups.js        # One-off CLI utility: lists all group names + JIDs for the logged-in account
     ├── tunnel.sh            # Starts a Cloudflare Quick Tunnel, watches for the URL, reports it to Apps Script
     ├── package.json / package-lock.json
-    ├── node_modules/        # Installed dependencies (Baileys, Express, qrcode-terminal)
-    ├── auth_info/           # ⚠️ Baileys multi-file session/credential store (see Security below)
-    ├── cloudflare              # ⚠️ Stray file: last-reported tunnel URL, appears committed by accident
-    └── "get groups"            # ⚠️ Stray file: captured output of get-groups.js (real group names + JIDs), appears committed by accident
+    ├── .env.example         # Bot secrets template (copy to .env — never commit .env)
+    ├── auth_info/           # Local only (gitignored): Baileys session store
+    └── SECURITY.md          # Operator checklist for secrets and session rotation
 ```
 
 ### Component responsibilities
@@ -242,11 +241,11 @@ The smallest possible Baileys client: connects, prints a QR when needed, persist
 
 #### `whatsapp-bot/server.js`
 The actual production entry point. Combines the same Baileys client as `index.js` with an Express server that exposes:
-- `POST /send-file` — accepts `{ secret, filename, base64, caption }`, validates the shared secret, decodes the base64 payload, and sends it as a document to a **hard-coded** WhatsApp group JID (`TEST_GROUP_JID`).
+- `POST /send-file` — accepts `{ secret, filename, base64, caption }`, validates the shared secret, decodes the base64 payload, and sends it as a document to the WhatsApp group JID from `WHATSAPP_GROUP_JID`.
 - `GET /health` — returns `{ status, connected }`.
 
 #### `whatsapp-bot/get-groups.js`
-A throwaway CLI script: connects with the existing saved session, calls `groupFetchAllParticipating()`, prints every group's name and JID, then exits. Used to find the correct JID to hard-code into `server.js`.
+A throwaway CLI script: connects with the existing saved session, calls `groupFetchAllParticipating()`, prints every group's name and JID, then exits. Used to find the correct JID to put in `.env` as `WHATSAPP_GROUP_JID`.
 
 #### `whatsapp-bot/tunnel.sh`
 Starts `cloudflared tunnel --url http://localhost:3000` as a Quick Tunnel (no Cloudflare account/domain needed), tails its log for the freshly-assigned `*.trycloudflare.com` URL, and — every time that URL changes — POSTs it to the Apps Script Web App so Apps Script always knows where to deliver files. Meant to be run under a process manager (e.g. `pm2`) rather than directly, since Quick Tunnel URLs are ephemeral and rotate on every restart.
@@ -306,23 +305,16 @@ Response:
 4. **Shared Secret** — appended as the `secret` query parameter on CSV uploads
 5. **ntfy.sh Topic** (optional) — e.g. `sheeraz-dengue-sync-x7f2`, for phone alerts
 
-### `whatsapp-bot/server.js` (edit in source — not exposed via any UI)
-```js
-const PORT = 3000;
-const TEST_GROUP_JID = '120363412435970342@g.us'; // target WhatsApp group
-const SHARED_SECRET = 'blahblah';                  // must match Apps Script's value
+### `whatsapp-bot/.env` (copy from `.env.example` — never commit)
+```
+WHATSAPP_GROUP_JID=<from node get-groups.js>
+WHATSAPP_SHARED_SECRET=<openssl rand -hex 24>
+APPS_SCRIPT_URL=<Apps Script /exec URL>
+APPS_SCRIPT_SECRET=<must match ADMIN_PANEL_SECRET script property>
+URL_UPDATE_SECRET=<must match URL_UPDATE_SECRET script property>
 ```
 
-### `whatsapp-bot/tunnel.sh`
-```bash
-APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/.../exec"
-URL_UPDATE_SECRET="blahblah"   # must match Apps Script's URL_UPDATE_SECRET
-LOCAL_PORT=3000
-```
-
-> All three secrets above (extension's shared secret, `server.js`'s `SHARED_SECRET`, and
-> `tunnel.sh`'s `URL_UPDATE_SECRET`) must be coordinated with whatever the Apps Script
-> deployment expects — they are not automatically synced anywhere.
+Apps Script secrets and Drive/Sheet IDs live in **Project Settings → Script properties**, not in source. See `backend/SCRIPT_PROPERTIES.example` and [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -354,82 +346,34 @@ from WhatsApp → **Linked Devices** → **Link a Device**.
 To expose the webhook publicly and keep Apps Script aware of the URL:
 ```bash
 chmod +x tunnel.sh
-pm2 start tunnel.sh --name dts-tunnel
-pm2 start server.js --name dts-whatsapp-bot
+pm2 start ecosystem.config.js
+pm2 save
 ```
 
 > **`tunnel.sh` requires `jq`** for parsing JSON responses from Apps Script.
 > Install it with: `sudo apt install jq` (Debian/Ubuntu) or `brew install jq` (macOS).
 
-To find a group's JID (for updating `TEST_GROUP_JID`):
+To find a group's JID (for `WHATSAPP_GROUP_JID` in `.env`):
 ```bash
 node get-groups.js
 ```
 
 ---
 
-## 🔐 Security Considerations — **read before deploying**
+## 🔐 Security
 
-This is the most important section. The current repository state has several issues that
-should be treated as **must-fix before any real-world / production use**, not just
-"nice to have":
+**Follow [SECURITY.md](SECURITY.md) before deploying.** In short:
 
-### 🔴 Critical — WhatsApp session credentials are committed to Git
-`whatsapp-bot/auth_info/` (≈3,900 files, ~16MB) contains the **live Baileys multi-file
-auth state** — the actual signed-in WhatsApp session keys. Anyone with read access to
-this repository can use these files to impersonate the linked WhatsApp account without
-ever scanning a QR code. This should never have been committed.
-
-**Action items:**
-- Immediately log out / unlink the device from WhatsApp (**Linked Devices** on the phone)
-  to invalidate the exposed session.
-- Add `auth_info/` to `.gitignore` (there currently is none in the repo).
-- Rewrite Git history to purge `auth_info/` from all commits (`git filter-repo` or BFG),
-  since deleting the folder in a new commit does not remove it from history.
-- Re-pair the bot with a fresh session after history is cleaned.
-
-### 🔴 Critical — hard-coded, weak shared secrets
-`SHARED_SECRET = 'blahblah'` in `server.js` and `URL_UPDATE_SECRET="blahblah"` in
-`tunnel.sh` are both placeholder-strength values committed directly in source. Anyone
-who finds the tunnel URL (see below) and this secret can push arbitrary files to the
-WhatsApp group.
-
-**Action items:** move secrets to environment variables / a `.env` file (excluded from
-Git), and use long, random values.
-
-### 🟠 High — live tunnel URL and real group data committed
-The `whatsapp-bot/cloudflare` file contains a live `*.trycloudflare.com` URL, and the
-`whatsapp-bot/get groups` file contains real WhatsApp group names and JIDs (one of which
-embeds a phone number). These look like accidental commits of runtime/debug output
-rather than intentional source files.
-
-**Action items:** delete both from the repo and history, and add patterns like
-`cloudflare`, `get groups`, `*.log` to `.gitignore`.
-
-### 🟠 High — extension credential storage is not encrypted
-Per the original extension README, `username`/`password` are stored in
-`browser.storage.local` without application-level encryption. Treat the browser
-profile itself as sensitive, and don't share it.
-
-### 🟡 Medium — hard-coded target group
-`TEST_GROUP_JID` is hard-coded in `server.js`. There's no way to change the delivery
-target without editing and restarting the bot — worth making configurable (env var or
-small config file) once secrets are cleaned up.
-
-### 🟡 Medium — no `.gitignore` at all
-The complete absence of a `.gitignore` is what allowed `node_modules/`,
-`auth_info/`, and stray debug files into version control in the first place. This is the
-root cause of most issues above.
-
-**Minimum recommended `.gitignore` for `whatsapp-bot/`:**
-```
-node_modules/
-auth_info/
-*.log
-cloudflare
-get groups
-.env
-```
+- WhatsApp session (`auth_info/`), `.env`, chat history, contacts, schedules, and
+  tunnel/group dump files are **gitignored** and must stay that way.
+- Bot secrets come from `whatsapp-bot/.env`. Apps Script secrets and Drive/Sheet IDs
+  come from Script properties. There are no fallbacks like `blahblah` / `arsh7999`
+  in source — missing config fails closed.
+- Values that were previously committed (`auth_info/`, `arsh7999`, `blahblah`, group
+  JIDs, Drive folder IDs) are **burned**. Rotate them. Unlink the WhatsApp device and
+  scan a new QR. History still contains the old files until it is rewritten.
+- Extension `username`/`password` live in `browser.storage.local` unencrypted. Treat
+  the browser profile as sensitive.
 
 ---
 
@@ -546,18 +490,17 @@ WhatsApp group delivery
 4. **No encryption at rest** — neither `browser.storage.local` (extension) nor `auth_info/` (bot) are encrypted by the application itself.
 5. **External dependencies** — the pipeline relies on Apps Script being deployed/reachable, and on the Cloudflare Quick Tunnel being alive; either being down breaks WhatsApp delivery (though the extension→Sheet path is unaffected).
 6. **Ephemeral tunnel URLs** — Cloudflare Quick Tunnels are not a stable public endpoint; if `tunnel.sh` or its process manager isn't running, Apps Script has no way to reach the bot.
-7. **Hard-coded delivery target and secrets** — see Security Considerations above; currently requires editing source + restart to change.
-8. **Reconnect loop has no backoff** — repeated disconnects could hammer WhatsApp's servers with reconnect attempts.
+7. **Git history still contains old secrets** until it is rewritten — see SECURITY.md.
+8. **Reconnect loop** uses exponential backoff (3s–60s) in `server.js`; a persistently broken network will still retry.
 9. **`ntfy.sh` is best-effort** — not a substitute for real monitoring/alerting.
 
 ---
 
 ## 🔮 Future Improvements
 
-- [ ] **Fix the credential leak**: purge `auth_info/`, rotate the WhatsApp session, add `.gitignore`.
-- [ ] Move all secrets (`SHARED_SECRET`, `URL_UPDATE_SECRET`, popup secret) to environment variables.
-- [ ] Make `TEST_GROUP_JID` configurable without code changes.
-- [ ] Add backoff/delay to the Baileys reconnect loop.
+- [x] Stop tracking `auth_info/`, runtime PII, and hard-coded secrets (see SECURITY.md).
+- [ ] Purge those paths from Git history (`git filter-repo`) and force-push.
+- [ ] Rotate every secret that was ever committed and re-pair WhatsApp.
 - [ ] Configurable schedules from the popup (extension side).
 - [ ] Persistent execution history / exportable diagnostic logs on both sides.
 - [ ] Replace Quick Tunnel with a stable named Cloudflare Tunnel (or other fixed-endpoint solution) to avoid the URL-reporting dance entirely.

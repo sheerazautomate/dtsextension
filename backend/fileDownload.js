@@ -1,6 +1,6 @@
 function getDownloadLinks() {
   // Folder ID from the provided URL
-  var folderId = '1Vs3s_LgzzI_AG1ikdpDKp0-FIZQkOrf8';
+  var folderId = requireScriptProp_('DRIVE_PDF_FOLDER_ID');
   
   // Access the folder
   var folder = DriveApp.getFolderById(folderId);

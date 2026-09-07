@@ -25,10 +25,11 @@ You already have three different secret constants in this project — `SHARED_SE
 overwritten one of them depending on file load order (undefined, not something to
 rely on).
 
-Set `ADMIN_PANEL_SECRET` in `AdminPanel.js` to a new random value, and use that same
-value in the bot's `.env` (`APPS_SCRIPT_SECRET`), `tunnel.sh`, the admin panel's
-`APPS_SCRIPT_SECRET`, and the extension. It's intentionally independent from your
-three existing secrets — no need to change those.
+Set `ADMIN_PANEL_SECRET` as an Apps Script **Script property** (not in source). Use
+the same value in the bot's `.env` as `APPS_SCRIPT_SECRET`. See
+`backend/SCRIPT_PROPERTIES.example` and `SECURITY.md`. It is a different property
+name from `SHARED_SECRET` / `WHATSAPP_SHARED_SECRET` / `URL_UPDATE_SECRET` so the
+Apps Script global scope cannot collide.
 
 ## Install
 
@@ -37,7 +38,7 @@ three existing secrets — no need to change those.
 2. Open `Code.js` and `router.js` in this project and replace their contents with the
    versions here (or apply the diffs manually if you'd rather review each line —
    both are small).
-3. Set `ADMIN_PANEL_SECRET` to a real value.
+3. Set Script properties from `backend/SCRIPT_PROPERTIES.example` (including `ADMIN_PANEL_SECRET`). Never put the real values in source.
 4. **Deploy → Manage deployments → Edit (pencil icon) → New version → Deploy.**
    Editing files alone does not update the live `/exec` endpoint — you already know
    this from the Apps Script deployment-staleness issue noted previously, but it's

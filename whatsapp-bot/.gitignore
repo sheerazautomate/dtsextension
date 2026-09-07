@@ -5,6 +5,8 @@ cloudflare
 get groups
 .env
 .env.local
+.env.*
+!.env.example
 scheduled_messages.json
 chat_history.json
 known_contacts.json
