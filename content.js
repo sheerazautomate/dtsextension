@@ -197,6 +197,79 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Admin panel integration: periodic heartbeat + remote "trigger run now"
+  // command, piggybacked on the same Apps Script URL/secret already used
+  // for CSV uploads. Best-effort only — never blocks or breaks the main flow.
+  // ---------------------------------------------------------------------
+  const HEARTBEAT_INTERVAL_MS = 20000;
+  const handledCommandIds = new Set();
+
+  async function ackExtensionCommand(scriptUrl, secret, id, result) {
+    try {
+      const url = new URL(scriptUrl);
+      url.searchParams.set('action', 'ackCommand');
+      await fetch(url.toString(), {
+        method: 'POST',
+        body: JSON.stringify({ secret, target: 'extension', id, result })
+      });
+    } catch (e) {
+      // best-effort only
+    }
+  }
+
+  async function handleExtensionCommand(scriptUrl, secret, command) {
+    if (!command || handledCommandIds.has(command.id)) return;
+    handledCommandIds.add(command.id);
+
+    if (command.command === 'triggerRun') {
+      logLine('[admin] Remote "trigger run now" received');
+      await setState({ flowStep: 'login', loginAttempts: 0, nextRunAt: null });
+      await ackExtensionCommand(scriptUrl, secret, command.id, { ok: true });
+      if (!window.location.href.startsWith(LOGIN_URL)) {
+        window.location.href = LOGIN_URL;
+      } else {
+        runFlow();
+      }
+    } else {
+      await ackExtensionCommand(scriptUrl, secret, command.id, { ok: false, error: 'unknown command' });
+    }
+  }
+
+  async function pushHeartbeat() {
+    try {
+      const stored = await getState();
+      if (!stored.scriptUrl) return;
+
+      const url = new URL(stored.scriptUrl);
+      url.searchParams.set('action', 'extensionHeartbeat');
+
+      const res = await fetch(url.toString(), {
+        method: 'POST',
+        body: JSON.stringify({
+          secret: stored.secret || '',
+          flowStep: stored.flowStep || 'idle',
+          nextRunAt: stored.nextRunAt || null,
+          lastSuccessAt: stored.lastSuccessAt || null,
+          lastError: stored.lastError || null,
+          loginAttempts: stored.loginAttempts || 0,
+          isOnline: navigator.onLine,
+          dayComplete: !!stored.dayComplete,
+          currentUrl: window.location.href
+        })
+      });
+      const result = await res.json().catch(() => null);
+      if (result && result.command) {
+        await handleExtensionCommand(stored.scriptUrl, stored.secret || '', result.command);
+      }
+    } catch (e) {
+      // best-effort only — heartbeat failures should never break the automation
+    }
+  }
+
+  setInterval(pushHeartbeat, HEARTBEAT_INTERVAL_MS);
+  pushHeartbeat();
+
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.flowStep) return;
     if (changes.flowStep.newValue === 'idle') {

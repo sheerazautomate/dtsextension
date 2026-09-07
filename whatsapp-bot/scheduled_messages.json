@@ -1,0 +1,105 @@
+{
+  "schedules": [
+    {
+      "id": "c92f870a2e25",
+      "status": "completed",
+      "recipients": [
+        "120363412435970342@g.us"
+      ],
+      "message": {
+        "text": "Hello this a scheduled msg",
+        "attachment": {
+          "filename": "427b tda.png",
+          "path": "/home/sheeraz/GitHub/dtsextension/whatsapp-bot/scheduled-attachments/c92f870a2e25/427b tda.png"
+        }
+      },
+      "type": "once",
+      "runAt": "2026-09-04T08:13:00+05:00",
+      "createdAt": "2026-09-04T03:11:47.154Z",
+      "lastRunAt": "2026-09-04T03:13:24.105Z",
+      "history": [
+        {
+          "attemptedAt": "2026-09-04T03:13:22.481Z",
+          "jid": "120363412435970342@g.us",
+          "ok": true
+        }
+      ],
+      "nextRunAt": null
+    },
+    {
+      "id": "ca4e8e62f711",
+      "status": "active",
+      "recipients": [
+        "120363412435970342@g.us"
+      ],
+      "message": {
+        "text": "the daily scheduled message",
+        "attachment": null
+      },
+      "type": "recurring",
+      "recurring": {
+        "frequency": "daily",
+        "time": "09:00",
+        "daysOfWeek": [],
+        "timezone": "Asia/Karachi"
+      },
+      "createdAt": "2026-09-04T03:13:14.958Z",
+      "lastRunAt": "2026-09-07T04:00:16.335Z",
+      "history": [
+        {
+          "attemptedAt": "2026-09-04T04:00:22.507Z",
+          "jid": "120363412435970342@g.us",
+          "ok": true
+        },
+        {
+          "attemptedAt": "2026-09-05T04:00:20.234Z",
+          "jid": "120363412435970342@g.us",
+          "ok": true
+        },
+        {
+          "attemptedAt": "2026-09-06T07:47:12.517Z",
+          "jid": "120363412435970342@g.us",
+          "ok": true
+        },
+        {
+          "attemptedAt": "2026-09-07T04:00:15.662Z",
+          "jid": "120363412435970342@g.us",
+          "ok": true
+        }
+      ],
+      "nextRunAt": "2026-09-08T04:00:00.000Z"
+    },
+    {
+      "id": "a7794c3a52f4",
+      "status": "completed",
+      "recipients": [
+        "923113361326@s.whatsapp.net",
+        "923043203575@s.whatsapp.net"
+      ],
+      "message": {
+        "text": "This is a test message with attachment",
+        "attachment": {
+          "filename": "Election Timers.png",
+          "path": "/home/sheeraz/GitHub/dtsextension/whatsapp-bot/scheduled-attachments/a7794c3a52f4/Election Timers.png"
+        }
+      },
+      "type": "once",
+      "runAt": "2026-09-04T09:15:00+05:00",
+      "createdAt": "2026-09-04T04:13:14.741Z",
+      "lastRunAt": "2026-09-04T04:15:31.951Z",
+      "history": [
+        {
+          "attemptedAt": "2026-09-04T04:15:28.720Z",
+          "jid": "923113361326@s.whatsapp.net",
+          "ok": true
+        },
+        {
+          "attemptedAt": "2026-09-04T04:15:31.487Z",
+          "jid": "923043203575@s.whatsapp.net",
+          "ok": true
+        }
+      ],
+      "nextRunAt": null
+    }
+  ]
+}

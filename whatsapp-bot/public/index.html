@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Scheduler</title>
+<style>
+  :root {
+    --bg: #0b141a;
+    --panel: #111b21;
+    --panel2: #1f2c33;
+    --panel3: #202c33;
+    --accent: #25d366;
+    --accent-dark: #128c7e;
+    --text: #e9edef;
+    --text-dim: #8696a0;
+    --danger: #ef5350;
+    --border: #2a3942;
+    --bubble-out: #005c4b;
+    --bubble-in: #202c33;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+  .app { display: flex; height: 100vh; }
+
+  /* ---- Sidebar ---- */
+  .sidebar { width: 380px; min-width: 320px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--panel); }
+  .sidebar-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--panel2); border-bottom: 1px solid var(--border); }
+  .sidebar-header h1 { font-size: 16px; margin: 0; }
+  .icon-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; padding: 6px; border-radius: 50%; }
+  .icon-btn:hover { background: var(--panel3); color: var(--text); }
+  .search-bar { padding: 8px 12px; }
+  .search-bar input { width: 100%; padding: 8px 12px; border-radius: 20px; border: none; background: var(--panel2); color: var(--text); font-size: 14px; }
+  .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .sidebar-tabs button { flex: 1; padding: 10px; background: none; border: none; color: var(--text-dim); font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .sidebar-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .sidebar-list { flex: 1; overflow-y: auto; }
+  .sidebar-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--panel2); }
+  .sidebar-item:hover { background: var(--panel2); }
+  .sidebar-item.active { background: var(--panel3); }
+  .avatar { width: 42px; height: 42px; min-width: 42px; border-radius: 50%; background: var(--panel3); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text-dim); font-weight: 600; }
+  .item-main { flex: 1; min-width: 0; }
+  .item-title-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .item-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-time { font-size: 11px; color: var(--text-dim); white-space: nowrap; margin-left: 8px; }
+  .item-preview { font-size: 13px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .item-pill { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--panel3); color: var(--text-dim); margin-left: 6px; }
+  .empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 30px 16px; }
+
+  .add-contact-row { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 6px; }
+  .add-contact-row input { flex: 1; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); font-size: 13px; }
+
+  /* ---- Main chat pane ---- */
+  .main { flex: 1; display: flex; flex-direction: column; background: #0b141a; }
+  .main-header { padding: 10px 20px; background: var(--panel2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .main-header .name { font-size: 15px; font-weight: 600; }
+  .main-header .sub { font-size: 12px; color: var(--text-dim); }
+  .messages { flex: 1; overflow-y: auto; padding: 18px 8%; display: flex; flex-direction: column; gap: 4px; }
+  .bubble-row { display: flex; }
+  .bubble-row.out { justify-content: flex-end; }
+  .bubble { max-width: 65%; padding: 7px 10px; border-radius: 8px; font-size: 14px; line-height: 1.4; position: relative; }
+  .bubble.in { background: var(--bubble-in); border-top-left-radius: 2px; }
+  .bubble.out { background: var(--bubble-out); border-top-right-radius: 2px; }
+  .bubble .sender { font-size: 12px; color: #7fd99c; font-weight: 600; margin-bottom: 2px; }
+  .bubble .time { font-size: 10px; color: var(--text-dim); text-align: right; margin-top: 3px; }
+  .reply-bar { padding: 10px 16px; background: var(--panel2); border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+  .reply-bar input[type=text] { flex: 1; padding: 10px 14px; border-radius: 20px; border: none; background: var(--panel3); color: var(--text); font-size: 14px; }
+  .reply-bar input[type=file] { max-width: 130px; font-size: 11px; color: var(--text-dim); }
+  .placeholder-main { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 14px; text-align: center; padding: 40px; }
+
+  /* ---- Buttons ---- */
+  .btn { padding: 9px 15px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .btn-primary { background: var(--accent); color: #06231a; }
+  .btn-secondary { background: var(--panel3); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-round { border-radius: 20px; }
+
+  /* ---- Scheduler drawer ---- */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; z-index: 40; }
+  .overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: -520px; width: 500px; max-width: 92vw; height: 100vh; background: var(--panel); border-left: 1px solid var(--border); z-index: 50; transition: right 0.2s ease; display: flex; flex-direction: column; }
+  .drawer.open { right: 0; }
+  .drawer-header { padding: 14px 18px; background: var(--panel2); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .drawer-tabs { display: flex; gap: 4px; padding: 10px 12px; }
+  .drawer-tabs button { flex: 1; padding: 9px; background: var(--panel2); border: none; color: var(--text-dim); cursor: pointer; border-radius: 8px; font-size: 13px; }
+  .drawer-tabs button.active { background: var(--accent-dark); color: white; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 4px 18px 18px; }
+
+  label { display: block; font-size: 12px; color: var(--text-dim); margin: 12px 0 4px; }
+  input[type=text], input[type=date], input[type=time], input[type=password], input[type=number], textarea, select {
+    width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); font-size: 14px;
+  }
+  textarea { min-height: 70px; resize: vertical; }
+  .recipient-box { max-height: 130px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--panel2); }
+  .recipient-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13px; }
+  .recipient-row input { width: auto; }
+  .schedule-type-row { display: flex; gap: 8px; }
+  .schedule-type-row button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel2); color: var(--text-dim); cursor: pointer; }
+  .schedule-type-row button.active { background: var(--accent-dark); color: white; border-color: var(--accent-dark); }
+  .days-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .day-chip { padding: 6px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); color: var(--text-dim); cursor: pointer; font-size: 12px; }
+  .day-chip.active { background: var(--accent); color: #06231a; border-color: var(--accent); }
+  .row-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .list-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .list-item .title { font-weight: 600; font-size: 13px; }
+  .list-item .meta { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+  .status-active { background: #2b4a3a; color: #7fd99c; }
+  .status-completed { background: #3a3a2b; color: #d9c67f; }
+  .status-ok { color: #7fd99c; }
+  .status-fail { color: var(--danger); }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--border); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 100; }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+  .item-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .item-actions button { padding: 6px 10px; font-size: 11px; }
+  .jitter-row { display: flex; gap: 8px; }
+  .jitter-row > div { flex: 1; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { margin: 0; }
+
+  .secret-gate { max-width: 400px; margin: 80px auto; }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="container secret-gate">
+  <div class="panel">
+    <h2>Connect</h2>
+    <label>Bot server base URL</label>
+    <input type="text" id="baseUrl" placeholder="https://your-tunnel-or-host">
+    <label>Shared secret</label>
+    <input type="password" id="secretInput" placeholder="WHATSAPP_SHARED_SECRET">
+    <div class="row-actions">
+      <button class="btn btn-primary" onclick="connect()">Connect</button>
+    </div>
+    <div class="hint">Stored only in this browser tab's memory — not saved anywhere.</div>
+  </div>
+</div>
+
+<div id="app" class="app" style="display:none">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h1>WhatsApp Scheduler</h1>
+      <div>
+        <button class="icon-btn" title="Scheduler" onclick="openDrawer()">🗓️</button>
+        <button class="icon-btn" title="Disconnect" onclick="disconnect()">⏻</button>
+      </div>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="sidebarSearch" placeholder="Search..." oninput="renderSidebarList()">
+    </div>
+    <div class="sidebar-tabs">
+      <button id="stab-chats" class="active" onclick="showSidebarTab('chats')">Chats</button>
+      <button id="stab-groups" onclick="showSidebarTab('groups')">Groups</button>
+      <button id="stab-contacts" onclick="showSidebarTab('contacts')">Contacts</button>
+    </div>
+    <div class="sidebar-list" id="sidebarList"></div>
+    <div class="add-contact-row" id="addContactRow" style="display:none">
+      <input type="text" id="newContactNumber" placeholder="923001234567">
+      <button class="btn btn-secondary" onclick="resolveContact()">Add</button>
+    </div>
+  </div>
+
+  <div class="main" id="mainPane">
+    <div class="placeholder-main" id="mainPlaceholder">Select a chat, group, or contact to view messages.</div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <strong>Scheduler</strong>
+    <button class="icon-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <button id="tab-composer" class="active" onclick="showDrawerTab('composer')">Composer</button>
+    <button id="tab-upcoming" onclick="showDrawerTab('upcoming')">Upcoming</button>
+    <button id="tab-history" onclick="showDrawerTab('history')">History</button>
+  </div>
+  <div class="drawer-body">
+    <!-- COMPOSER -->
+    <div id="view-composer">
+      <h3 id="composerTitle" style="margin:4px 0 0">New scheduled message</h3>
+
+      <label>Recipients</label>
+      <input type="text" id="recipientSearch" placeholder="Search groups and contacts..." oninput="renderRecipientList()">
+      <div class="recipient-box" id="recipientBox"></div>
+
+      <label>Message text</label>
+      <textarea id="msgText" placeholder="Type your message..."></textarea>
+
+      <label>Attachment (optional)</label>
+      <input type="file" id="msgFile">
+      <div class="hint" id="existingAttachmentHint"></div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="jitterEnabled" onchange="toggleJitterFields()">
+        <label style="margin:0">Randomize delay between sends (jitter)</label>
+      </div>
+      <div id="jitterFields" style="display:none">
+        <div class="jitter-row">
+          <div><label>Min seconds</label><input type="number" id="jitterMin" value="20" min="0"></div>
+          <div><label>Max seconds</label><input type="number" id="jitterMax" value="120" min="0"></div>
+        </div>
+        <div class="hint">Applies between each recipient in this schedule, and as the gap before other schedules due around the same time.</div>
+      </div>
+
+      <label>Schedule type</label>
+      <div class="schedule-type-row">
+        <button id="type-once" class="active" onclick="setScheduleType('once')">One-time</button>
+        <button id="type-recurring" onclick="setScheduleType('recurring')">Recurring</button>
+      </div>
+
+      <div id="onceFields">
+        <label>Date</label>
+        <input type="date" id="onceDate">
+        <label>Time (Asia/Karachi)</label>
+        <input type="time" id="onceTime">
+      </div>
+
+      <div id="recurringFields" style="display:none">
+        <label>Frequency</label>
+        <select id="freqSelect" onchange="onFreqChange()">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
+        <label>Time (Asia/Karachi)</label>
+        <input type="time" id="recurTime">
+        <div id="weeklyDays" style="display:none">
+          <label>Days of week</label>
+          <div class="days-row" id="daysRow"></div>
+        </div>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn btn-primary" onclick="submitSchedule()">Save schedule</button>
+        <button class="btn btn-secondary" onclick="sendNow()">Send now</button>
+        <button class="btn btn-secondary" id="cancelEditBtn" style="display:none" onclick="resetComposer()">Cancel edit</button>
+      </div>
+    </div>
+
+    <!-- UPCOMING -->
+    <div id="view-upcoming" style="display:none">
+      <h3 style="margin:4px 0 12px">Upcoming &amp; recurring schedules</h3>
+      <div id="upcomingList"></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="view-history" style="display:none">
+      <h3 style="margin:4px 0 12px">Send history</h3>
+      <div id="historyList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let baseUrl = '';
+let secret = '';
+let groups = [];
+let contacts = [];
+let chats = [];
+let selectedRecipients = new Set();
+let scheduleType = 'once';
+let editingId = null;
+let currentSidebarTab = 'chats';
+let currentChatJid = null;
+let currentChatIsGroup = false;
+let refreshTimer = null;
+
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let selectedDays = new Set();
+
+function toast(msg, isError) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+async function api(path, opts = {}) {
+  const url = baseUrl.replace(/\/$/, '') + path;
+  const method = opts.method || 'GET';
+  let finalUrl = url;
+  let body;
+  if (method === 'GET' || method === 'DELETE') {
+    finalUrl += (url.includes('?') ? '&' : '?') + 'secret=' + encodeURIComponent(secret);
+  } else {
+    body = JSON.stringify({ ...(opts.body || {}), secret });
+  }
+  const res = await fetch(finalUrl, { method, headers: { 'Content-Type': 'application/json' }, body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function connect() {
+  baseUrl = document.getElementById('baseUrl').value.trim();
+  secret = document.getElementById('secretInput').value.trim();
+  if (!baseUrl || !secret) { toast('Enter both base URL and secret', true); return; }
+  try {
+    await refreshAll();
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    initDaysRow();
+    setDefaultDateTime();
+    refreshTimer = setInterval(refreshAll, 12000);
+  } catch (err) {
+    toast('Connection failed: ' + err.message, true);
+  }
+}
+
+function disconnect() {
+  baseUrl = ''; secret = '';
+  if (refreshTimer) clearInterval(refreshTimer);
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('gate').style.display = 'block';
+}
+
+async function refreshAll() {
+  const [g, c, ch] = await Promise.all([api('/groups'), api('/contacts'), api('/chats')]);
+  groups = g.groups || [];
+  contacts = c.contacts || [];
+  chats = ch.chats || [];
+  renderSidebarList();
+  if (currentChatJid) loadChatMessages(currentChatJid, true);
+}
+
+/* ---------------- Sidebar ---------------- */
+
+function showSidebarTab(tab) {
+  currentSidebarTab = tab;
+  ['chats','groups','contacts'].forEach(t => {
+    document.getElementById('stab-' + t).classList.toggle('active', t === tab);
+  });
+  document.getElementById('addContactRow').style.display = tab === 'contacts' ? 'flex' : 'none';
+  renderSidebarList();
+}
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const k = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const kNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+  const sameDay = k.getUTCFullYear() === kNow.getUTCFullYear() && k.getUTCMonth() === kNow.getUTCMonth() && k.getUTCDate() === kNow.getUTCDate();
+  if (sameDay) return `${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}`;
+  return `${k.getUTCFullYear()}-${pad(k.getUTCMonth()+1)}-${pad(k.getUTCDate())}`;
+}
+
+function initials(name) {
+  return (name || '?').trim().slice(0, 2).toUpperCase();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function renderSidebarList() {
+  const q = (document.getElementById('sidebarSearch').value || '').toLowerCase();
+  const box = document.getElementById('sidebarList');
+  box.innerHTML = '';
+
+  let items = [];
+  if (currentSidebarTab === 'chats') {
+    items = chats.map(c => ({ jid: c.jid, name: c.name, isGroup: c.isGroup, preview: c.lastMessage?.text, time: c.lastMessage?.timestamp }));
+  } else if (currentSidebarTab === 'groups') {
+    items = groups.map(g => ({ jid: g.jid, name: g.name, isGroup: true }));
+  } else {
+    items = contacts.map(c => ({ jid: c.jid, name: c.name, isGroup: false }));
+  }
+
+  items = items.filter(i => (i.name || '').toLowerCase().includes(q) || i.jid.toLowerCase().includes(q));
+
+  if (items.length === 0) {
+    box.innerHTML = `<div class="empty">No ${currentSidebarTab} found${currentSidebarTab === 'contacts' ? ' — add one below' : ''}</div>`;
+    return;
+  }
+
+  items.forEach(i => {
+    const row = document.createElement('div');
+    row.className = 'sidebar-item' + (i.jid === currentChatJid ? ' active' : '');
+    row.onclick = () => openChat(i.jid, i.name, i.isGroup);
+    row.innerHTML = `
+      <div class="avatar">${initials(i.name)}</div>
+      <div class="item-main">
+        <div class="item-title-row">
+          <span class="item-name">${escapeHtml(i.name)}</span>
+          ${i.time ? `<span class="item-time">${fmtTime(i.time)}</span>` : ''}
+        </div>
+        <div class="item-preview">${i.preview ? escapeHtml(i.preview.slice(0, 50)) : (i.isGroup ? 'Group' : 'Contact')}</div>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+/* ---------------- Chat pane ---------------- */
+
+async function openChat(jid, name, isGroup) {
+  currentChatJid = jid;
+  currentChatIsGroup = isGroup;
+  renderSidebarList();
+  const main = document.getElementById('mainPane');
+  main.innerHTML = `
+    <div class="main-header">
+      <div class="avatar">${initials(name)}</div>
+      <div>
+        <div class="name">${escapeHtml(name)}</div>
+        <div class="sub">${isGroup ? 'Group' : 'Contact'}</div>
+      </div>
+      <div style="margin-left:auto">
+        <button class="btn btn-secondary" onclick="prefillComposer('${jid.replace(/'/g,"\\'")}', '${(name||'').replace(/'/g,"\\'")}'); openDrawer();">Schedule message</button>
+      </div>
+    </div>
+    <div class="messages" id="messagesBox"><div class="empty">Loading...</div></div>
+    <div class="reply-bar">
+      <input type="file" id="replyFile">
+      <input type="text" id="replyText" placeholder="Type a message" onkeydown="if(event.key==='Enter') sendReply()">
+      <button class="btn btn-primary btn-round" onclick="sendReply()">Send</button>
+    </div>
+  `;
+  await loadChatMessages(jid);
+}
+
+async function loadChatMessages(jid, silent) {
+  try {
+    const data = await api(`/chats/${encodeURIComponent(jid)}/messages?limit=150`);
+    if (currentChatJid !== jid) return;
+    const box = document.getElementById('messagesBox');
+    if (!box) return;
+    const wasAtBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+    if (data.messages.length === 0) {
+      box.innerHTML = '<div class="empty">No message history yet for this chat. Messages will appear here as they are sent or received.</div>';
+      return;
+    }
+    box.innerHTML = data.messages.map(m => `
+      <div class="bubble-row ${m.fromMe ? 'out' : 'in'}">
+        <div class="bubble ${m.fromMe ? 'out' : 'in'}">
+          ${(currentChatIsGroup && !m.fromMe && m.senderName) ? `<div class="sender">${escapeHtml(m.senderName)}</div>` : ''}
+          ${escapeHtml(m.text)}
+          <div class="time">${fmtTime(m.timestamp)}</div>
+        </div>
+      </div>
+    `).join('');
+    if (!silent || wasAtBottom) box.scrollTop = box.scrollHeight;
+  } catch (err) {
+    if (!silent) toast('Failed to load messages: ' + err.message, true);
+  }
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function sendReply() {
+  if (!currentChatJid) return;
+  const textEl = document.getElementById('replyText');
+  const fileEl = document.getElementById('replyFile');
+  const text = textEl.value.trim();
+  const file = fileEl.files[0];
+  if (!text && !file) return;
+  const body = { recipients: [currentChatJid], message: { text } };
+  if (file) body.message.attachment = { filename: file.name, base64: await fileToBase64(file) };
+  textEl.value = '';
+  fileEl.value = '';
+  try {
+    const data = await api('/send-now', { method: 'POST', body });
+    if (!data.results[0].ok) toast('Send failed: ' + data.results[0].error, true);
+    await loadChatMessages(currentChatJid);
+    await refreshAll();
+  } catch (err) {
+    toast('Send failed: ' + err.message, true);
+  }
+}
+
+/* ---------------- Drawer (scheduler) ---------------- */
+
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  loadSchedules();
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+function showDrawerTab(name) {
+  ['composer','upcoming','history'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    document.getElementById('view-' + t).style.display = t === name ? 'block' : 'none';
+  });
+  if (name === 'upcoming') loadSchedules();
+  if (name === 'history') loadHistory();
+}
+
+function prefillComposer(jid, name) {
+  showDrawerTab('composer');
+  selectedRecipients = new Set([jid]);
+  renderRecipientList();
+}
+
+function renderRecipientList() {
+  const q = (document.getElementById('recipientSearch').value || '').toLowerCase();
+  const box = document.getElementById('recipientBox');
+  box.innerHTML = '';
+  const all = [
+    ...groups.map(g => ({ ...g, kind: 'group' })),
+    ...contacts.map(c => ({ ...c, kind: 'contact' })),
+  ].filter(r => r.name.toLowerCase().includes(q) || r.jid.toLowerCase().includes(q));
+
+  if (all.length === 0) { box.innerHTML = '<div class="empty">No matches</div>'; return; }
+
+  all.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'recipient-row';
+    const checked = selectedRecipients.has(r.jid) ? 'checked' : '';
+    row.innerHTML = `
+      <input type="checkbox" ${checked} onchange="toggleRecipient('${r.jid.replace(/'/g,"\\'")}', this.checked)">
+      <span>${escapeHtml(r.name)}</span>
+      <span class="item-pill">${r.kind}</span>
+    `;
+    box.appendChild(row);
+  });
+}
+
+function toggleRecipient(jid, checked) {
+  if (checked) selectedRecipients.add(jid); else selectedRecipients.delete(jid);
+}
+
+function toggleJitterFields() {
+  document.getElementById('jitterFields').style.display = document.getElementById('jitterEnabled').checked ? 'block' : 'none';
+}
+
+function getJitterFromForm() {
+  if (!document.getElementById('jitterEnabled').checked) return null;
+  const minSec = Number(document.getElementById('jitterMin').value) || 0;
+  const maxSec = Number(document.getElementById('jitterMax').value) || minSec;
+  return { minSec, maxSec: Math.max(minSec, maxSec) };
+}
+
+function setScheduleType(type) {
+  scheduleType = type;
+  document.getElementById('type-once').classList.toggle('active', type === 'once');
+  document.getElementById('type-recurring').classList.toggle('active', type === 'recurring');
+  document.getElementById('onceFields').style.display = type === 'once' ? 'block' : 'none';
+  document.getElementById('recurringFields').style.display = type === 'recurring' ? 'block' : 'none';
+}
+
+function initDaysRow() {
+  const row = document.getElementById('daysRow');
+  row.innerHTML = '';
+  DAY_NAMES.forEach((name, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'day-chip';
+    chip.textContent = name;
+    chip.onclick = () => {
+      if (selectedDays.has(idx)) selectedDays.delete(idx); else selectedDays.add(idx);
+      chip.classList.toggle('active');
+    };
+    row.appendChild(chip);
+  });
+}
+
+function onFreqChange() {
+  document.getElementById('weeklyDays').style.display = document.getElementById('freqSelect').value === 'weekly' ? 'block' : 'none';
+}
+
+function setDefaultDateTime() {
+  const now = new Date();
+  document.getElementById('onceDate').value = now.toISOString().slice(0, 10);
+  document.getElementById('onceTime').value = '09:00';
+  document.getElementById('recurTime').value = '09:00';
+}
+
+async function resolveContact() {
+  const raw = document.getElementById('newContactNumber').value.trim();
+  if (!raw) { toast('Enter a phone number', true); return; }
+  try {
+    const data = await api('/contacts/resolve', { method: 'POST', body: { numbers: [raw] } });
+    const r = data.resolved[0];
+    if (r && r.exists) {
+      document.getElementById('newContactNumber').value = '';
+      toast('Contact added: ' + r.jid);
+      await refreshAll();
+    } else {
+      toast('Number not found on WhatsApp', true);
+    }
+  } catch (err) {
+    toast('Lookup failed: ' + err.message, true);
+  }
+}
+
+async function sendNow() {
+  if (selectedRecipients.size === 0) { toast('Select at least one recipient', true); return; }
+  const text = document.getElementById('msgText').value.trim();
+  const file = document.getElementById('msgFile').files[0];
+  if (!text && !file) { toast('Add message text and/or an attachment', true); return; }
+  const body = { recipients: Array.from(selectedRecipients), message: { text } };
+  if (file) body.message.attachment = { filename: file.name, base64: await fileToBase64(file) };
+  const jitter = getJitterFromForm();
+  if (jitter) body.jitter = jitter;
+  try {
+    toast('Sending...');
+    const data = await api('/send-now', { method: 'POST', body });
+    const okCount = data.results.filter(r => r.ok).length;
+    const failCount = data.results.length - okCount;
+    toast(failCount === 0 ? `Sent to ${okCount} recipient(s)` : `${okCount} sent, ${failCount} failed`, failCount > 0);
+    refreshAll();
+  } catch (err) {
+    toast('Send failed: ' + err.message, true);
+  }
+}
+
+async function submitSchedule() {
+  if (selectedRecipients.size === 0) { toast('Select at least one recipient', true); return; }
+  const text = document.getElementById('msgText').value.trim();
+  const file = document.getElementById('msgFile').files[0];
+  if (!text && !file) { toast('Add message text and/or an attachment', true); return; }
+
+  const body = { recipients: Array.from(selectedRecipients), message: { text } };
+  if (file) body.message.attachment = { filename: file.name, base64: await fileToBase64(file) };
+
+  if (scheduleType === 'once') {
+    const date = document.getElementById('onceDate').value;
+    const time = document.getElementById('onceTime').value;
+    if (!date || !time) { toast('Pick a date and time', true); return; }
+    body.schedule = { type: 'once', runAt: `${date}T${time}:00+05:00` };
+  } else {
+    const freq = document.getElementById('freqSelect').value;
+    const time = document.getElementById('recurTime').value;
+    if (!time) { toast('Pick a time', true); return; }
+    body.schedule = { type: 'recurring', frequency: freq, time };
+    if (freq === 'weekly') {
+      if (selectedDays.size === 0) { toast('Pick at least one day', true); return; }
+      body.schedule.daysOfWeek = Array.from(selectedDays);
+    }
+  }
+
+  const jitter = getJitterFromForm();
+  body.schedule.jitter = jitter || undefined;
+
+  try {
+    if (editingId) {
+      await api(`/schedules/${editingId}`, { method: 'PATCH', body });
+      toast('Schedule updated');
+    } else {
+      await api('/schedules', { method: 'POST', body });
+      toast('Schedule created');
+    }
+    resetComposer();
+    loadSchedules();
+  } catch (err) {
+    toast('Save failed: ' + err.message, true);
+  }
+}
+
+function resetComposer() {
+  editingId = null;
+  selectedRecipients = new Set();
+  document.getElementById('msgText').value = '';
+  document.getElementById('msgFile').value = '';
+  document.getElementById('existingAttachmentHint').textContent = '';
+  document.getElementById('composerTitle').textContent = 'New scheduled message';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+  document.getElementById('jitterEnabled').checked = false;
+  toggleJitterFields();
+  selectedDays = new Set();
+  initDaysRow();
+  setScheduleType('once');
+  setDefaultDateTime();
+  renderRecipientList();
+}
+
+async function loadSchedules() {
+  try {
+    const data = await api('/schedules');
+    const upcoming = (data.schedules || []).filter(s => s.status === 'active');
+    const box = document.getElementById('upcomingList');
+    box.innerHTML = '';
+    if (upcoming.length === 0) { box.innerHTML = '<div class="empty">No upcoming schedules</div>'; return; }
+    upcoming.sort((a, b) => new Date(a.nextRunAt) - new Date(b.nextRunAt));
+    upcoming.forEach(s => box.appendChild(renderScheduleItem(s)));
+  } catch (err) {
+    toast('Failed to load schedules: ' + err.message, true);
+  }
+}
+
+function renderScheduleItem(s) {
+  const div = document.createElement('div');
+  div.className = 'list-item';
+  const recipCount = s.recipients.length;
+  const when = s.type === 'once'
+    ? `once at ${fmtKarachiFull(s.nextRunAt)}`
+    : `${s.recurring.frequency}${s.recurring.frequency === 'weekly' ? ' (' + s.recurring.daysOfWeek.map(d => DAY_NAMES[d]).join(',') + ')' : ''} at ${s.recurring.time} — next ${fmtKarachiFull(s.nextRunAt)}`;
+  const jitterNote = s.jitter ? ` · jitter ${s.jitter.minSec}-${s.jitter.maxSec}s` : '';
+  div.innerHTML = `
+    <div class="title">${s.message.text ? escapeHtml(s.message.text.slice(0, 60)) : '(no text)'}${s.message.attachment ? ' 📎' : ''}</div>
+    <div class="meta">${recipCount} recipient(s) · ${when}${jitterNote}</div>
+    <div class="item-actions">
+      <button class="btn btn-secondary" onclick="editSchedule('${s.id}')">Edit</button>
+      <button class="btn btn-danger" onclick="deleteSchedule('${s.id}')">Cancel</button>
+    </div>
+  `;
+  return div;
+}
+
+function fmtKarachiFull(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const k = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${k.getUTCFullYear()}-${pad(k.getUTCMonth()+1)}-${pad(k.getUTCDate())} ${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())} PKT`;
+}
+
+async function editSchedule(id) {
+  try {
+    const data = await api(`/schedules/${id}`);
+    const s = data.schedule;
+    editingId = id;
+    selectedRecipients = new Set(s.recipients);
+    document.getElementById('msgText').value = s.message.text || '';
+    document.getElementById('existingAttachmentHint').textContent = s.message.attachment
+      ? `Current attachment: ${s.message.attachment.filename} (upload a new file to replace it)` : '';
+    document.getElementById('composerTitle').textContent = 'Edit scheduled message';
+    document.getElementById('cancelEditBtn').style.display = 'inline-block';
+
+    document.getElementById('jitterEnabled').checked = !!s.jitter;
+    if (s.jitter) {
+      document.getElementById('jitterMin').value = s.jitter.minSec;
+      document.getElementById('jitterMax').value = s.jitter.maxSec;
+    }
+    toggleJitterFields();
+
+    if (s.type === 'once') {
+      setScheduleType('once');
+      const d = new Date(s.nextRunAt);
+      const k = new Date(d.getTime() + 5 * 60 * 60 * 1000);
+      document.getElementById('onceDate').value = k.toISOString().slice(0, 10);
+      document.getElementById('onceTime').value = k.toISOString().slice(11, 16);
+    } else {
+      setScheduleType('recurring');
+      document.getElementById('freqSelect').value = s.recurring.frequency;
+      document.getElementById('recurTime').value = s.recurring.time;
+      selectedDays = new Set(s.recurring.daysOfWeek || []);
+      initDaysRow();
+      Array.from(document.getElementById('daysRow').children).forEach((chip, idx) => {
+        if (selectedDays.has(idx)) chip.classList.add('active');
+      });
+      onFreqChange();
+    }
+    renderRecipientList();
+    showDrawerTab('composer');
+  } catch (err) {
+    toast('Failed to load schedule: ' + err.message, true);
+  }
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Cancel this schedule?')) return;
+  try {
+    await api(`/schedules/${id}`, { method: 'DELETE' });
+    toast('Schedule cancelled');
+    loadSchedules();
+  } catch (err) {
+    toast('Delete failed: ' + err.message, true);
+  }
+}
+
+async function loadHistory() {
+  try {
+    const data = await api('/schedules');
+    const box = document.getElementById('historyList');
+    box.innerHTML = '';
+    const withHistory = (data.schedules || []).filter(s => (s.history || []).length > 0);
+    if (withHistory.length === 0) { box.innerHTML = '<div class="empty">No send history yet</div>'; return; }
+    withHistory.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      const rows = (s.history || []).slice().reverse().map(h => `
+        <div class="meta">
+          <span class="${h.ok ? 'status-ok' : 'status-fail'}">${h.ok ? '✓ sent' : '✗ failed'}</span>
+          — ${h.jid} — ${fmtKarachiFull(h.attemptedAt)}${h.error ? ' — ' + escapeHtml(h.error) : ''}
+        </div>
+      `).join('');
+      div.innerHTML = `
+        <div class="title">${s.message.text ? escapeHtml(s.message.text.slice(0, 60)) : '(no text)'}
+          <span class="status-badge status-${s.status}">${s.status}</span>
+        </div>
+        <div style="margin-top:8px">${rows}</div>
+      `;
+      box.appendChild(div);
+    });
+  } catch (err) {
+    toast('Failed to load history: ' + err.message, true);
+  }
+}
+</script>
+</body>
+</html>
