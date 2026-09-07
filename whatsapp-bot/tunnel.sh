@@ -23,7 +23,7 @@
 # Run this under pm2 instead of running "cloudflared tunnel --url ..." directly.
 
 # ==== CONFIG — fill these in ====
-APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/AKfycbwhuxqihQeDPgNxWsJ97dRKolqh44VMvEXekHi8SNShsWCaPGbqLvazGYaqq7wunttSMQ/exec"
+APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 APPS_SCRIPT_SECRET="arsh7999"  # must match Code.gs SHARED_SECRET
 LOCAL_PORT=3000
 COMMAND_POLL_INTERVAL=10
@@ -42,14 +42,14 @@ LAST_HEALTH_CHECK=0
 
 report_url() {
   local url="$1"
-  curl -s -X POST "${APPS_SCRIPT_WEBAPP_URL}" \
+  curl -sL -X POST "${APPS_SCRIPT_WEBAPP_URL}" \
     -H "Content-Type: application/json" \
     -d "{\"secret\":\"${APPS_SCRIPT_SECRET}\",\"url\":\"${url}\"}" > /dev/null
 }
 
 ack_command() {
   local id="$1"
-  curl -s -X POST "${APPS_SCRIPT_WEBAPP_URL}?action=ackCommand" \
+  curl -sL -X POST "${APPS_SCRIPT_WEBAPP_URL}?action=ackCommand" \
     -H "Content-Type: application/json" \
     -d "{\"secret\":\"${APPS_SCRIPT_SECRET}\",\"target\":\"tunnel\",\"id\":\"${id}\",\"result\":{\"ok\":true}}" > /dev/null
 }
@@ -83,7 +83,7 @@ start_cloudflared() {
 command_poll_loop() {
   while true; do
     sleep "$COMMAND_POLL_INTERVAL"
-    RESPONSE=$(curl -s "${APPS_SCRIPT_WEBAPP_URL}?action=getStatus&secret=${APPS_SCRIPT_SECRET}")
+    RESPONSE=$(curl -sL "${APPS_SCRIPT_WEBAPP_URL}?action=getStatus&secret=${APPS_SCRIPT_SECRET}")
     CMD_ID=$(echo "$RESPONSE" | jq -r '.pendingCommands.tunnel.id // empty' 2>/dev/null)
     CMD_NAME=$(echo "$RESPONSE" | jq -r '.pendingCommands.tunnel.command // empty' 2>/dev/null)
 
