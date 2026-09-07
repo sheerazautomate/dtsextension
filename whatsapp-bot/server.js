@@ -7,7 +7,7 @@ const initScheduler = require('./scheduler'); // ADDED
 // ==== CONFIG ====
 const PORT = process.env.PORT || 3000;
 const TEST_GROUP_JID = process.env.WHATSAPP_GROUP_JID || '923457620174-1511031682@g.us'; // "DEA" group
-const SHARED_SECRET = process.env.WHATSAPP_SHARED_SECRET || 'blahblah'; // gates /send-file
+const SHARED_SECRET = process.env.WHATSAPP_SHARED_SECRET || 'arsh7999'; // gates /send-file
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';       // central hub, for heartbeats/commands
 const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || ''; // must match Code.gs SHARED_SECRET
 const HEARTBEAT_INTERVAL_MS = 15000;

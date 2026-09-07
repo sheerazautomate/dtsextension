@@ -23,7 +23,7 @@
 # Run this under pm2 instead of running "cloudflared tunnel --url ..." directly.
 
 # ==== CONFIG — fill these in ====
-APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
+APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/AKfycbwhuxqihQeDPgNxWsJ97dRKolqh44VMvEXekHi8SNShsWCaPGbqLvazGYaqq7wunttSMQ/exec"
 APPS_SCRIPT_SECRET="arsh7999"  # must match Code.gs SHARED_SECRET
 LOCAL_PORT=3000
 COMMAND_POLL_INTERVAL=10

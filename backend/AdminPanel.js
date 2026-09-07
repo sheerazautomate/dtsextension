@@ -11,7 +11,7 @@
  * reusing one of those names would silently collide with the existing one.
  */
 
-var ADMIN_PANEL_SECRET = 'blahblah'; // must match bot/tunnel.sh/extension/admin panel
+var ADMIN_PANEL_SECRET = 'arsh7999'; // must match bot/tunnel.sh/extension/admin panel
 
 var ADMIN_EVENT_LOG_SHEET = 'AdminEventLog';
 var ADMIN_MAX_EVENTS = 100;
