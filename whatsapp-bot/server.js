@@ -12,10 +12,13 @@ const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';       // central hub,
 const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET || ''; // must match Code.gs SHARED_SECRET
 const HEARTBEAT_INTERVAL_MS = 15000;
 const EVENT_BUFFER_SIZE = 50;
+const RECONNECT_BASE_DELAY_MS = 3000;   // initial reconnect delay
+const RECONNECT_MAX_DELAY_MS = 60000;   // cap at 1 minute
 // ================
 
 let sock;
 let attachContactListeners = () => {}; // ADDED — replaced once initScheduler() runs below
+let reconnectAttempts = 0;             // tracks consecutive failed reconnects for backoff
 const startedAt = Date.now();
 const stats = {
   connected: false,
@@ -61,7 +64,11 @@ async function startBot() {
       pushEvent('connection', `Closed (code ${statusCode}). Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
         stats.reconnectCount++;
-        startBot();
+        reconnectAttempts++;
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, 60s, 60s, ...
+        const delay = Math.min(RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1), RECONNECT_MAX_DELAY_MS);
+        pushEvent('reconnect', `Attempt ${reconnectAttempts} — waiting ${Math.round(delay / 1000)}s before reconnect`);
+        setTimeout(startBot, delay);
       } else {
         stats.lastError = 'logged out — re-pair required (scan QR again)';
         pushEvent('error', stats.lastError);
@@ -69,6 +76,7 @@ async function startBot() {
     } else if (connection === 'open') {
       stats.connected = true;
       stats.lastConnectedAt = new Date().toISOString();
+      reconnectAttempts = 0; // reset backoff on successful connection
       pushEvent('connection', '✅ Connected to WhatsApp');
       attachContactListeners(); // ADDED — re-hook contact sync on this (possibly new) sock
     }
