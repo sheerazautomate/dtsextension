@@ -63,11 +63,6 @@ LAST_HEARTBEAT=0
 LAST_HEALTH_CHECK=0
 LAST_RESTART_AT=0
 
-<<<<<<< HEAD
-if echo "$APPS_SCRIPT_WEBAPP_URL" | grep -q 'YOUR_DEPLOYMENT_ID'; then
-  echo "WARNING: APPS_SCRIPT_WEBAPP_URL is still the placeholder."
-  echo "         Set APPS_SCRIPT_URL in whatsapp-bot/.env (or edit this script)."
-=======
 if [ -z "$APPS_SCRIPT_WEBAPP_URL" ] || echo "$APPS_SCRIPT_WEBAPP_URL" | grep -q 'YOUR_DEPLOYMENT_ID'; then
   echo "ERROR: APPS_SCRIPT_URL is not set. Copy .env.example to .env and fill it in."
   exit 1
@@ -79,7 +74,6 @@ fi
 if [ -z "$URL_UPDATE_SECRET" ]; then
   echo "ERROR: URL_UPDATE_SECRET is not set. It must match the Apps Script URL_UPDATE_SECRET property."
   exit 1
->>>>>>> e43be23 (Stop tracking secrets, session files, and hard-coded credentials)
 fi
 
 report_url() {
