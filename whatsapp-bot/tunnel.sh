@@ -9,42 +9,74 @@
 # flagging a healthy tunnel as stale/offline.
 #
 # Also polls Apps Script for a pending "restartTunnel" command (queued from
-# the admin panel) and, when found, kills the current cloudflared process so
-# the main loop below respawns it with a fresh URL.
+# the admin panel). On that command we cycle cloudflared ourselves: kill the
+# current process, start a new one, and wait for the new URL. We do NOT
+# rely on `tail -F` exiting — that pipe stays open after cloudflared dies,
+# which is why the Restart tunnel button previously killed the tunnel and
+# never brought a new URL back.
 #
-# The current cloudflared PID is written to a file (not just a shell
-# variable) because backgrounded subshells only get a COPY of variables at
-# the moment they're forked and never see later updates from the parent.
-# A shared file avoids that.
+# A single supervisor loop is the only thing that starts/stops cloudflared
+# (the poller just drops a restart flag). That avoids races between the
+# two background loops.
 #
 # Requirements: cloudflared, curl, jq (apt install jq)
 #
 # Usage: ./tunnel.sh
 # Run this under pm2 instead of running "cloudflared tunnel --url ..." directly.
 
-# ==== CONFIG — fill these in ====
-APPS_SCRIPT_WEBAPP_URL="https://script.google.com/macros/s/AKfycbwhuxqihQeDPgNxWsJ97dRKolqh44VMvEXekHi8SNShsWCaPGbqLvazGYaqq7wunttSMQ/exec"
-APPS_SCRIPT_SECRET="arsh7999"  # must match Code.gs SHARED_SECRET
-LOCAL_PORT=3000
-COMMAND_POLL_INTERVAL=10
-HEARTBEAT_INTERVAL=300          # re-report URL every 5 minutes (seconds)
-HEALTH_CHECK_INTERVAL=60        # verify tunnel is reachable every 60 seconds
-HEALTH_CHECK_TIMEOUT=10         # seconds to wait for health endpoint
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Load whatsapp-bot/.env if present so this script and server.js share config.
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$SCRIPT_DIR/.env"
+  set +a
+fi
+
+# ==== CONFIG — env / .env override these defaults ====
+# APPS_SCRIPT_SECRET must match AdminPanel.js ADMIN_PANEL_SECRET (getStatus / ack).
+# URL_UPDATE_SECRET must match waUrlRegistry.js URL_UPDATE_SECRET (URL POST).
+# They are different secrets on purpose. If the log says "Reported URL" but the
+# admin panel never changes, read the curl response — a secret mismatch comes
+# back as {"error":"Unauthorized"}.
+APPS_SCRIPT_WEBAPP_URL="${APPS_SCRIPT_WEBAPP_URL:-${APPS_SCRIPT_URL:-https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec}}"
+APPS_SCRIPT_SECRET="${APPS_SCRIPT_SECRET:-arsh7999}"
+URL_UPDATE_SECRET="${URL_UPDATE_SECRET:-${APPS_SCRIPT_SECRET}}"
+LOCAL_PORT="${LOCAL_PORT:-${PORT:-3000}}"
+COMMAND_POLL_INTERVAL="${COMMAND_POLL_INTERVAL:-10}"
+HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-300}"          # re-report URL every 5 minutes
+HEALTH_CHECK_INTERVAL="${HEALTH_CHECK_INTERVAL:-60}"     # verify tunnel is reachable
+HEALTH_CHECK_TIMEOUT="${HEALTH_CHECK_TIMEOUT:-10}"
+HEALTH_GRACE_SECONDS="${HEALTH_GRACE_SECONDS:-45}"       # skip health checks after a start
+RESTART_DEBOUNCE_SECONDS="${RESTART_DEBOUNCE_SECONDS:-20}"
 # =================================
 
 LOG_FILE="/tmp/cloudflared.log"
 PID_FILE="/tmp/cloudflared.pid"
 URL_FILE="/tmp/cloudflared.url"
-LAST_URL=""
+RESTART_FILE="/tmp/cloudflared.restart"
+START_TS_FILE="/tmp/cloudflared.start_ts"
 LAST_COMMAND_ID=""
 LAST_HEARTBEAT=0
 LAST_HEALTH_CHECK=0
+LAST_RESTART_AT=0
+
+if echo "$APPS_SCRIPT_WEBAPP_URL" | grep -q 'YOUR_DEPLOYMENT_ID'; then
+  echo "WARNING: APPS_SCRIPT_WEBAPP_URL is still the placeholder."
+  echo "         Set APPS_SCRIPT_URL in whatsapp-bot/.env (or edit this script)."
+fi
 
 report_url() {
   local url="$1"
-  curl -sL -X POST "${APPS_SCRIPT_WEBAPP_URL}" \
+  local resp body code
+  resp=$(curl -sL -w '\n%{http_code}' -X POST "${APPS_SCRIPT_WEBAPP_URL}" \
     -H "Content-Type: application/json" \
-    -d "{\"secret\":\"${APPS_SCRIPT_SECRET}\",\"url\":\"${url}\"}" > /dev/null
+    -d "{\"secret\":\"${URL_UPDATE_SECRET}\",\"url\":\"${url}\"}")
+  code=$(printf '%s\n' "$resp" | tail -n1)
+  body=$(printf '%s\n' "$resp" | sed '$d')
+  echo "Reported URL to Apps Script (HTTP ${code}): ${body}"
 }
 
 ack_command() {
@@ -69,17 +101,73 @@ health_check() {
   return 1
 }
 
+cloudflared_alive() {
+  local pid
+  pid=$(cat "$PID_FILE" 2>/dev/null || true)
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+kill_cloudflared() {
+  local pid
+  pid=$(cat "$PID_FILE" 2>/dev/null || true)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    echo "Stopping cloudflared PID $pid"
+    kill "$pid" 2>/dev/null || true
+    local i=0
+    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 10 ]; do
+      sleep 0.5
+      i=$((i + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "cloudflared PID $pid still alive — sending SIGKILL"
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$PID_FILE"
+}
+
 start_cloudflared() {
-  cloudflared tunnel --url "http://localhost:${LOCAL_PORT}" > "$LOG_FILE" 2>&1 &
-  CLOUDFLARED_PID=$!
-  echo "$CLOUDFLARED_PID" > "$PID_FILE"
-  echo "cloudflared started (PID $CLOUDFLARED_PID), watching $LOG_FILE for URL..."
+  kill_cloudflared
+  # Drop the old URL/log so the watcher cannot re-report a dead tunnel,
+  # and so a new four-word URL is always treated as fresh.
+  rm -f "$URL_FILE"
+  : > "$LOG_FILE"
+  cloudflared tunnel --url "http://localhost:${LOCAL_PORT}" >> "$LOG_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+  date +%s > "$START_TS_FILE"
+  echo "cloudflared started (PID $(cat "$PID_FILE")), watching $LOG_FILE for URL..."
+}
+
+request_restart() {
+  date +%s > "$RESTART_FILE"
+}
+
+# Four hyphenated words only — never matches cloudflared's internal
+# https://api.trycloudflare.com backend URL.
+extract_tunnel_url() {
+  grep -oE 'https://[a-z]+-[a-z]+-[a-z]+-[a-z]+\.trycloudflare\.com' "$LOG_FILE" 2>/dev/null | tail -n1
+}
+
+# Polls the log file (not `tail -F`) so a cloudflared death/restart cannot
+# stall URL detection. Runs as a background loop.
+watch_log_loop() {
+  local url last
+  while true; do
+    url=$(extract_tunnel_url)
+    last=$(cat "$URL_FILE" 2>/dev/null || true)
+    if [ -n "$url" ] && [ "$url" != "$last" ]; then
+      echo "Detected new tunnel URL: $url"
+      echo "$url" > "$URL_FILE"
+      report_url "$url"
+    fi
+    sleep 1
+  done
 }
 
 # --- Background loop: poll Apps Script for a pending "restartTunnel" command ---
 # Requires `jq` (apt install jq) for reliable JSON parsing.
-# Runs as a backgrounded subshell — always reads the PID from $PID_FILE,
-# never from a variable, since it can't see this script's later updates.
+# Does not start/stop cloudflared itself — only raises the restart flag
+# the supervisor honours. That way a click cannot race a health-check kill.
 command_poll_loop() {
   while true; do
     sleep "$COMMAND_POLL_INTERVAL"
@@ -88,72 +176,79 @@ command_poll_loop() {
     CMD_NAME=$(echo "$RESPONSE" | jq -r '.pendingCommands.tunnel.command // empty' 2>/dev/null)
 
     if [ -n "$CMD_ID" ] && [ "$CMD_ID" != "$LAST_COMMAND_ID" ] && [ "$CMD_NAME" = "restartTunnel" ]; then
-      echo "Received restartTunnel command ($CMD_ID) — killing cloudflared to force a fresh URL"
       LAST_COMMAND_ID="$CMD_ID"
-      ack_command "$CMD_ID"
-      CURRENT_PID=$(cat "$PID_FILE" 2>/dev/null)
-      if [ -n "$CURRENT_PID" ]; then
-        kill "$CURRENT_PID" 2>/dev/null
-        echo "Killed cloudflared PID $CURRENT_PID"
+      NOW=$(date +%s)
+      if [ "$LAST_RESTART_AT" -gt 0 ] && [ $((NOW - LAST_RESTART_AT)) -lt "$RESTART_DEBOUNCE_SECONDS" ]; then
+        echo "Received restartTunnel command ($CMD_ID) — ignored, last restart was $((NOW - LAST_RESTART_AT))s ago"
+        ack_command "$CMD_ID"
+        continue
       fi
+      echo "Received restartTunnel command ($CMD_ID) — cycling cloudflared for a fresh URL"
+      LAST_RESTART_AT=$NOW
+      request_restart
+      ack_command "$CMD_ID"
     fi
   done
 }
 
+shutdown() {
+  echo "Shutting down tunnel.sh — stopping cloudflared and background loops"
+  kill_cloudflared
+  jobs -p | while read -r job; do
+    kill "$job" 2>/dev/null || true
+  done
+  exit 0
+}
+trap shutdown SIGINT SIGTERM
+
 start_cloudflared
+watch_log_loop &
 command_poll_loop &
 
-# --- Foreground loop: tail the log and react whenever a URL appears; also
-#     restart cloudflared if it dies (from a crash or from the kill above).
-#     Periodically re-reports the URL (heartbeat) and checks tunnel health. ---
+# --- Supervisor: the only place that starts cloudflared after boot.
+#     Handles admin-panel restarts, crashes, and failed health checks. ---
 while true; do
-  tail -F "$LOG_FILE" 2>/dev/null | while read -r line; do
-    # Requires the real four-word-hyphenated pattern, so it can never match
-    # cloudflared's own internal "api.trycloudflare.com" backend URL.
-    URL=$(echo "$line" | grep -oE 'https://[a-z]+-[a-z]+-[a-z]+-[a-z]+\.trycloudflare\.com')
+  sleep 1
+  NOW=$(date +%s)
 
-    if [ -n "$URL" ] && [ "$URL" != "$LAST_URL" ]; then
-      echo "Detected new tunnel URL: $URL"
-      LAST_URL="$URL"
-      echo "$URL" > "$URL_FILE"
-      report_url "$URL"
-      echo "Reported URL to Apps Script."
-      LAST_HEARTBEAT=$(date +%s)
-    fi
-  done
-
-  # If we get here, the tail pipe closed (cloudflared may have exited).
-  CURRENT_PID=$(cat "$PID_FILE" 2>/dev/null)
-  if [ -z "$CURRENT_PID" ] || ! kill -0 "$CURRENT_PID" 2>/dev/null; then
-    echo "cloudflared not running — restarting..."
+  if [ -f "$RESTART_FILE" ]; then
+    rm -f "$RESTART_FILE"
+    echo "Restart flag set — cycling cloudflared"
+    LAST_RESTART_AT=$NOW
     start_cloudflared
+    continue
   fi
 
-  # --- Periodic heartbeat: re-report the current URL to keep Apps Script timestamp fresh ---
-  NOW=$(date +%s)
-  if [ -n "$LAST_URL" ] && [ $((NOW - LAST_HEARTBEAT)) -ge "$HEARTBEAT_INTERVAL" ]; then
-    echo "Heartbeat: re-reporting tunnel URL ($LAST_URL) to Apps Script"
-    report_url "$LAST_URL"
+  if ! cloudflared_alive; then
+    echo "cloudflared not running — restarting..."
+    LAST_RESTART_AT=$NOW
+    start_cloudflared
+    continue
+  fi
+
+  CURRENT_URL=$(cat "$URL_FILE" 2>/dev/null || true)
+
+  # Periodic heartbeat: re-report the current URL to keep Apps Script timestamp fresh
+  if [ -n "$CURRENT_URL" ] && [ $((NOW - LAST_HEARTBEAT)) -ge "$HEARTBEAT_INTERVAL" ]; then
+    echo "Heartbeat: re-reporting tunnel URL ($CURRENT_URL) to Apps Script"
+    report_url "$CURRENT_URL"
     LAST_HEARTBEAT=$NOW
   fi
 
-  # --- Periodic health check: verify the tunnel is actually reachable ---
-  NOW=$(date +%s)
-  if [ -n "$LAST_URL" ] && [ $((NOW - LAST_HEALTH_CHECK)) -ge "$HEALTH_CHECK_INTERVAL" ]; then
-    if health_check "$LAST_URL"; then
-      echo "Health check: tunnel is reachable ($LAST_URL)"
+  STARTED_AT=$(cat "$START_TS_FILE" 2>/dev/null || echo 0)
+  IN_GRACE=0
+  if [ $((NOW - STARTED_AT)) -lt "$HEALTH_GRACE_SECONDS" ]; then
+    IN_GRACE=1
+  fi
+
+  if [ "$IN_GRACE" -eq 0 ] && [ -n "$CURRENT_URL" ] && [ $((NOW - LAST_HEALTH_CHECK)) -ge "$HEALTH_CHECK_INTERVAL" ]; then
+    if health_check "$CURRENT_URL"; then
+      echo "Health check: tunnel is reachable ($CURRENT_URL)"
     else
-      echo "Health check FAILED: tunnel not reachable ($LAST_URL) — restarting cloudflared"
-      CURRENT_PID=$(cat "$PID_FILE" 2>/dev/null)
-      if [ -n "$CURRENT_PID" ]; then
-        kill "$CURRENT_PID" 2>/dev/null
-      fi
-      # Clear the URL so we don't keep reporting a dead tunnel
-      LAST_URL=""
+      echo "Health check FAILED: tunnel not reachable ($CURRENT_URL) — requesting restart"
       rm -f "$URL_FILE"
+      request_restart
     fi
     LAST_HEALTH_CHECK=$NOW
   fi
-
-  sleep 1
 done
