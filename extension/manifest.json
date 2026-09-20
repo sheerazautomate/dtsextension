@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DTS Dashboard Auto-Login",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Auto-fills username/password and solves the simple math captcha on dashboard-tracking.punjab.gov.pk, then submits the login form.",
   "browser_specific_settings": {
     "gecko": {

@@ -50,10 +50,10 @@ In the extension popup, set:
 - **Apps Script Web App URL** → the `/exec` URL from step 2
 - **Shared Secret** → your `SHARED_SECRET`
 
-No code changes needed beyond what's already in `content.js` — it now pushes a
+No code changes needed beyond what's already in `extension/content.js` — it now pushes a
 heartbeat every 20s and will act on a `triggerRun` command automatically. Reload the
 extension (`about:debugging` → Reload, or re-load unpacked) to pick up the updated
-`content.js`.
+`extension/content.js`.
 
 ## 4. Update whatsapp-bot
 

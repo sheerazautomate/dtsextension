@@ -198,16 +198,26 @@ sequenceDiagram
 
 ```
 dtsextension/
-├── manifest.json          # WebExtension manifest (MV3), permissions, host access
-├── background.js          # Minimal background lifecycle stub
-├── content.js             # Main automation engine (schedule, login, CAPTCHA, CSV, sync)
-├── popup.html             # Operator configuration + status UI
-├── popup.js                # Popup logic, storage read/write, live polling (~2s)
-├── icons/                 # Extension icons (16/32/48/96/128 px)
-├── dtsextension.zip        # Pre-zipped build of the extension (for distribution/upload)
+├── admin-panel/           # Next.js admin panel
+├── extension/             # Firefox browser extension
+│   ├── manifest.json      # MV3 manifest, permissions, host access
+│   ├── background.js      # Minimal background lifecycle stub
+│   ├── content.js         # Main automation engine (schedule, login, CAPTCHA, CSV, sync)
+│   ├── popup.html         # Operator configuration + status UI
+│   ├── popup.js
+│   ├── settings.html      # Settings page (credentials, schedule, Apps Script URL)
+│   ├── settings.js
+│   ├── icons/             # Extension icons (16/32/48/96/128 px)
+│   ├── lib/               # Extracted utility logic (schedule.js, captcha.js)
+│   ├── tests/             # Unit tests for lib/ (schedule.test.js, captcha.test.js)
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── biome.json
+│   └── vitest.config.js
 ├── README.md
-│
-└── whatsapp-bot/           # Companion Node.js WhatsApp delivery service
+├── SECURITY.md
+├── dtsextension.zip       # Pre-zipped build of the extension (for distribution/upload)
+└── whatsapp-bot/          # Companion Node.js WhatsApp delivery service
     ├── index.js            # Minimal Baileys bootstrap (connect + QR + reconnect only)
     ├── server.js           # Production entry point: Baileys client + Express webhook (/send-file, /health)
     ├── get-groups.js        # One-off CLI utility: lists all group names + JIDs for the logged-in account
@@ -220,21 +230,21 @@ dtsextension/
 
 ### Component responsibilities
 
-#### `manifest.json`
+#### `extension/manifest.json`
 Declares MV3 config, `storage` permission, and host access limited to:
 - `https://dashboard-tracking.punjab.gov.pk/*`
 - `https://script.google.com/*`
 
 The content script is injected only on the dashboard host, at `document_idle`.
 
-#### `content.js`
+#### `extension/content.js`
 The extension's automation engine. Responsibilities: schedule computation (`SCHEDULE_TIMES`, 08:05–16:05 every 30 min), login-page DOM interaction, CAPTCHA text parsing + arithmetic evaluation, CSV download, `fetch()` POST to the Apps Script URL with retry/backoff, network `online`/`offline` handling, on-page overlay rendering, state persistence via `browser.storage.local`, and optional `ntfy.sh` POST for stuck-run/day-complete alerts.
 
-#### `popup.html` / `popup.js`
+#### `extension/popup.html` / `extension/popup.js`
 Operator control panel: fields for username, password, Apps Script Web App URL, shared secret, and `ntfy.sh` topic; **Save Credentials**, **Start**, **Stop** actions; live status section polling storage roughly every 2 seconds.
 
-#### `background.js`
-Minimal MV3 background script — largely a lifecycle stub, reserved for future alarms/notifications. Almost all logic currently lives in `content.js`.
+#### `extension/background.js`
+Minimal MV3 background script — largely a lifecycle stub, reserved for future alarms/notifications. Almost all logic currently lives in `extension/content.js`.
 
 #### `whatsapp-bot/index.js`
 The smallest possible Baileys client: connects, prints a QR when needed, persists credentials on `creds.update`, and reconnects automatically unless the session was explicitly logged out. Useful for first-time pairing or quick debugging — **not** the file you'd run in production, since it exposes no HTTP interface.
@@ -323,7 +333,7 @@ Apps Script secrets and Drive/Sheet IDs live in **Project Settings → Script pr
 ### Browser extension
 1. Clone the repo (`git clone https://github.com/sheerazautomate/dtsextension.git`).
 2. Open the browser's extension management page and enable **Developer Mode**.
-3. **Load Unpacked** → select the repo root (or `manifest.json`).
+3. **Load Unpacked** → select the `extension/` folder (contains `manifest.json`).
 4. Pin the extension to the toolbar.
 
 > The manifest declares `browser_specific_settings.gecko`, meaning it targets Firefox
@@ -484,7 +494,7 @@ WhatsApp group delivery
 
 ## ⚠️ Limitations
 
-1. **Dashboard dependency** — any change to DTS's login page, form IDs, CAPTCHA format, or report URL requires updating selectors/logic in `content.js`.
+1. **Dashboard dependency** — any change to DTS's login page, form IDs, CAPTCHA format, or report URL requires updating selectors/logic in `extension/content.js`.
 2. **CAPTCHA scope** — the solver only handles simple arithmetic text CAPTCHAs; not image/audio/anti-bot-hardened challenges.
 3. **Fixed schedule** — both the extension's `SCHEDULE_TIMES` and any Apps Script-side scheduling are defined in source, not configurable from any UI.
 4. **No encryption at rest** — neither `browser.storage.local` (extension) nor `auth_info/` (bot) are encrypted by the application itself.
@@ -525,7 +535,7 @@ A good contribution should:
 - [ ] No credentials, secrets, or `auth_info/` committed
 - [ ] `.gitignore` respected / updated if new sensitive paths are introduced
 - [ ] Manifest remains valid
-- [ ] Dashboard selectors tested if `content.js` changed
+- [ ] Dashboard selectors tested if `extension/content.js` changed
 - [ ] `/send-file` contract tested if `server.js` changed
 - [ ] README updated if behavior/configuration changed
 

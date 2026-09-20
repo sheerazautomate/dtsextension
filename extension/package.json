@@ -2,12 +2,11 @@
   "name": "dtsextension",
   "version": "1.2.0",
   "private": true,
-  "description": "DTS Dashboard Auto-Login + WhatsApp Report Bot",
+  "description": "DTS Dashboard Auto-Login browser extension",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "test:extension": "vitest run tests/",
-    "test:bot": "vitest run whatsapp-bot/tests/",
     "lint": "biome check .",
     "lint:fix": "biome check --write ."
   },

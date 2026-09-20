@@ -1,5 +1,6 @@
-node_modules/
-.next/
-.env
-.env.local
-.vercel
+# admin-panel/.gitignore
+# The root .gitignore covers most patterns. This file only adds
+# admin-panel-specific rules that the root file doesn't catch.
+
+# Nothing additional needed — root .gitignore handles everything.
+# Keep this file to document admin-panel-specific ignores if needed.

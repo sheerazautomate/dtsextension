@@ -3,6 +3,8 @@ const express = require('express');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const initScheduler = require('./scheduler'); // ADDED
+const { fetchMepcoBill, formatBillMessage } = require('./mepco'); // ADDED
+const { renderBillPdf, cleanupOldPdfs } = require('./mepco-pdf'); // ADDED
 
 function requiredEnv(name) {
   const v = process.env[name];
@@ -24,6 +26,8 @@ const HEARTBEAT_INTERVAL_MS = 15000;
 const EVENT_BUFFER_SIZE = 50;
 const RECONNECT_BASE_DELAY_MS = 3000;   // initial reconnect delay
 const RECONNECT_MAX_DELAY_MS = 60000;   // cap at 1 minute
+const MEPCO_PDF_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // ADDED — sweep old PDFs every 6h
+const MEPCO_PDF_MAX_AGE_HOURS = 24; // ADDED
 // ================
 
 let sock;
@@ -93,6 +97,75 @@ async function startBot() {
   });
 
   sock.ev.on('creds.update', saveCreds);
+
+  // ==== ADDED: MEPCO bill lookup — DMs only, never responds in groups ====
+  // "bill <14 digits>"        -> text summary (unchanged behaviour)
+  // "bill <14 digits> pdf"    -> renders and sends the authentic bill PDF
+  // "<14 digits>"             -> text summary (unchanged behaviour)
+  // "<14 digits> pdf"         -> renders and sends the authentic bill PDF
+  sock.ev.on('messages.upsert', async (m) => {
+    const msg = m.messages[0];
+    if (!msg || msg.key.fromMe || m.type !== 'notify') return;
+
+    // DM-only guard: ignore anything sent from/in a group chat.
+    if (msg.key.remoteJid?.endsWith('@g.us')) return;
+
+    const text =
+      msg.message?.conversation ||
+      msg.message?.extendedTextMessage?.text ||
+      '';
+
+    const billMatch =
+      text.match(/^bill\s+(\d{14})\s*(pdf)?\s*$/i) ||
+      text.match(/^(\d{14})\s*(pdf)?\s*$/i);
+    if (!billMatch) return;
+
+    const refNo = billMatch[1];
+    const wantsPdf = Boolean(billMatch[2]);
+    const jid = msg.key.remoteJid;
+    pushEvent('mepco', `Bill lookup requested: ${refNo}${wantsPdf ? ' (pdf)' : ''}`);
+
+    if (wantsPdf) {
+      try {
+        await sock.sendMessage(jid, { text: `🔎 Generating MEPCO bill PDF for ${refNo}...` });
+        const { pdfPath, bill } = await renderBillPdf(refNo);
+        const buffer = await require('fs/promises').readFile(pdfPath);
+        await sock.sendMessage(jid, {
+          document: buffer,
+          fileName: `mepco_${refNo}.pdf`,
+          mimetype: 'application/pdf',
+          caption: formatBillMessage(bill)
+        });
+        pushEvent('mepco_pdf', `PDF sent: ${refNo}`);
+      } catch (err) {
+        pushEvent('mepco_pdf_error', `${refNo}: ${err.message}`);
+        await sock.sendMessage(jid, {
+          text: `⚠️ Could not generate the bill PDF right now (${err.message}). Try "bill ${refNo}" for the text summary instead.`
+        });
+      }
+      return;
+    }
+
+    try {
+      await sock.sendMessage(jid, { text: `🔎 Checking MEPCO bill for ${refNo}...` });
+      const bill = await fetchMepcoBill(refNo);
+      if (bill) {
+        await sock.sendMessage(jid, { text: formatBillMessage(bill) });
+        pushEvent('mepco', `Bill lookup ok: ${refNo}`);
+      } else {
+        await sock.sendMessage(jid, {
+          text: `❌ No bill found for reference number ${refNo}. Double-check the 14-digit reference number.`
+        });
+        pushEvent('mepco', `Bill lookup not found: ${refNo}`);
+      }
+    } catch (err) {
+      pushEvent('mepco_error', `${refNo}: ${err.message}`);
+      await sock.sendMessage(jid, {
+        text: '⚠️ Could not fetch the bill right now — MEPCO may be down/slow, or (less likely, since this runs locally in Pakistan) a network issue. Try again shortly.'
+      });
+    }
+  });
+  // ================
 }
 
 startBot();
@@ -217,6 +290,14 @@ async function handleRemoteCommand(command) {
 
 setInterval(pushHeartbeat, HEARTBEAT_INTERVAL_MS);
 pushHeartbeat();
+
+// ==== ADDED: periodic cleanup of rendered MEPCO bill PDFs ====
+setInterval(() => {
+  cleanupOldPdfs(MEPCO_PDF_MAX_AGE_HOURS)
+    .then((n) => { if (n > 0) pushEvent('mepco_pdf_cleanup', `Removed ${n} PDF(s) older than ${MEPCO_PDF_MAX_AGE_HOURS}h`); })
+    .catch((err) => pushEvent('mepco_pdf_cleanup_error', String(err.message || err)));
+}, MEPCO_PDF_CLEANUP_INTERVAL_MS);
+// ================
 
 // ==== HTTP SERVER ====
 const app = express();
