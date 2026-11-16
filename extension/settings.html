@@ -98,8 +98,8 @@
   <h2>⏰ Schedule</h2>
   <div class="section">
     <div class="schedule-mode-toggle">
-      <button id="modeSimple" class="active" onclick="setScheduleMode('simple')">Simple</button>
-      <button id="modeAdvanced" onclick="setScheduleMode('advanced')">Advanced (custom slots)</button>
+      <button id="modeSimple" class="active">Simple</button>
+      <button id="modeAdvanced">Advanced (custom slots)</button>
     </div>
 
     <!-- Simple mode -->
@@ -124,7 +124,7 @@
     <!-- Advanced mode -->
     <div id="advancedSection" style="display: none;">
       <div class="time-slots-list" id="timeSlotsList"></div>
-      <button class="btn-secondary btn-sm" onclick="addTimeSlot()">+ Add time slot</button>
+      <button id="addTimeSlot" class="btn-secondary btn-sm">+ Add time slot</button>
     </div>
 
     <!-- Live preview -->
@@ -135,19 +135,19 @@
   <h2>💾 Import / Export</h2>
   <div class="section">
     <p style="font-size: 13px; color: #475569; margin: 0 0 10px;">
-      Save all settings to a JSON file for backup, or load a previously exported file to restore settings after reinstalling the extension.
+      Export saved settings to a JSON file, or import a backup to restore them. The file contains your password and shared secret; keep it private.
     </p>
-    <button class="btn-secondary" onclick="exportSettings()">📤 Export settings to file</button>
+    <button id="exportSettings" class="btn-secondary">📤 Export settings to file</button>
     <div class="file-input-wrapper">
-      <button class="btn-secondary" onclick="document.getElementById('importFile').click()">📥 Import settings from file</button>
-      <input id="importFile" type="file" accept=".json" onchange="importSettings(event)">
+      <button id="importSettings" class="btn-secondary">📥 Import settings from file</button>
+      <input id="importFile" type="file" accept=".json">
     </div>
   </div>
 
   <!-- =============== Save =============== -->
   <div class="actions-bar">
-    <button class="btn-success" onclick="saveAll()">✅ Save All Settings</button>
-    <button class="btn-secondary" onclick="resetDefaults()">🔄 Reset to Defaults</button>
+    <button id="saveAll" class="btn-success">✅ Save All Settings</button>
+    <button id="resetDefaults" class="btn-secondary">🔄 Reset to Defaults</button>
   </div>
   <div id="status"></div>
 

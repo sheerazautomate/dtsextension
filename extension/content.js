@@ -285,7 +285,21 @@
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.scheduleTimes) {
-      loadScheduleTimes(); // refresh cache when schedule is updated in settings
+      // A waiting countdown may point at a slot removed by the new schedule.
+      // Recalculate it immediately; active login/report steps continue normally.
+      (async () => {
+        await loadScheduleTimes();
+        const state = await getState();
+        if (state.flowStep !== 'waiting') return;
+        stopCountdown();
+        const next = getNextScheduledTime(new Date());
+        if (!next) {
+          await finishForToday();
+        } else {
+          await setState({ nextRunAt: next.getTime() });
+          scheduleNextRun(next.getTime());
+        }
+      })().catch(console.error);
     }
     if (changes.flowStep && changes.flowStep.newValue === 'idle') {
       stopCountdown();
@@ -428,9 +442,9 @@
   async function finishForToday(reasonSubtext) {
     stopCountdown();
     setCountdownText('✅');
-    setStatus('Reporting time is over', reasonSubtext || 'All scheduled runs up to 04:05 PM are complete.');
+    setStatus('Reporting time is over', reasonSubtext || 'All scheduled runs for today are complete.');
     await setState({ flowStep: 'idle', nextRunAt: null, dayComplete: true, dayCompleteAt: Date.now() });
-    notifyPhone('✅ Dormancy sync: done for today', reasonSubtext || 'All scheduled runs up to 04:05 PM are complete.');
+    notifyPhone('✅ Dormancy sync: done for today', reasonSubtext || 'All scheduled runs for today are complete.');
   }
 
   function scheduleNextRun(nextRunAt) {
@@ -454,7 +468,7 @@
     if (step === 'idle') {
       if (state.dayComplete) {
         setCountdownText('✅');
-        setStatus('Reporting time is over', 'All scheduled runs up to 04:05 PM are complete. Click Start tomorrow to run again.');
+        setStatus('Reporting time is over', 'All scheduled runs for today are complete. Click Start tomorrow to run again.');
       }
       return;
     }

@@ -94,10 +94,17 @@ function renderTimeSlots() {
   customTimeSlots.forEach((time, idx) => {
     const row = document.createElement('div');
     row.className = 'time-slot-row';
-    row.innerHTML = `
-      <input type="time" value="${time}" onchange="onSlotChange(${idx}, this.value)">
-      <button class="btn-remove" onclick="removeTimeSlot(${idx})">✕</button>
-    `;
+    const input = document.createElement('input');
+    input.type = 'time';
+    input.value = time;
+    input.setAttribute('aria-label', `Time slot ${idx + 1}`);
+    input.addEventListener('input', () => onSlotChange(idx, input.value));
+    const remove = document.createElement('button');
+    remove.className = 'btn-remove';
+    remove.textContent = '✕';
+    remove.setAttribute('aria-label', `Remove time slot ${idx + 1}`);
+    remove.addEventListener('click', () => removeTimeSlot(idx));
+    row.append(input, remove);
     timeSlotsListEl.appendChild(row);
   });
   updatePreview();
@@ -124,13 +131,31 @@ window.removeTimeSlot = removeTimeSlot;
 // ---------------------------------------------------------------------------
 // Schedule preview
 // ---------------------------------------------------------------------------
+function isValidTime(value) {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function validateSchedule(mode, start, end, interval, times) {
+  if (!['simple', 'advanced'].includes(mode)) throw new Error('Invalid schedule mode.');
+  if (!isValidTime(start) || !isValidTime(end) || start > end) {
+    throw new Error('Enter valid start and end times, with start no later than end.');
+  }
+  if (!Number.isInteger(interval) || interval < 5 || interval > 120 || interval % 5 !== 0) {
+    throw new Error('Interval must be a multiple of 5 between 5 and 120 minutes.');
+  }
+  if (mode === 'advanced' && (!Array.isArray(times) || !times.length || !times.every(isValidTime))) {
+    throw new Error('Add at least one valid custom time slot.');
+  }
+}
+
 function computeScheduleTimes() {
   if (currentMode === 'advanced') {
     return [...customTimeSlots].sort();
   }
-  const start = scheduleStartEl.value || DEFAULTS.scheduleStart;
-  const end = scheduleEndEl.value || DEFAULTS.scheduleEnd;
-  const interval = Number.parseInt(scheduleIntervalEl.value, 10) || DEFAULTS.scheduleInterval;
+  const start = scheduleStartEl.value;
+  const end = scheduleEndEl.value;
+  const interval = Number(scheduleIntervalEl.value);
+  if (!isValidTime(start) || !isValidTime(end) || !Number.isInteger(interval) || interval < 5 || interval > 120 || interval % 5 !== 0 || start > end) return [];
 
   const times = [];
   const [startH, startM] = start.split(':').map(Number);
@@ -184,6 +209,8 @@ async function loadSettings() {
 }
 
 async function saveAll() {
+  try {
+  validateSchedule(currentMode, scheduleStartEl.value, scheduleEndEl.value, Number(scheduleIntervalEl.value), customTimeSlots);
   const patch = {
     username: usernameEl.value.trim(),
     password: passwordEl.value,
@@ -199,14 +226,19 @@ async function saveAll() {
 
   await browser.storage.local.set(patch);
   showStatus('✅ All settings saved.');
+  } catch (err) {
+    showStatus(`❌ Save failed: ${err.message}`, true);
+  }
 }
 window.saveAll = saveAll;
 
 async function resetDefaults() {
   if (!confirm('Reset all settings to defaults? This will clear your credentials and custom schedule.')) return;
-  await browser.storage.local.set(DEFAULTS);
-  await loadSettings();
-  showStatus('🔄 Settings reset to defaults. Click Save to persist.');
+  try {
+    await browser.storage.local.set(DEFAULTS);
+    await loadSettings();
+    showStatus('🔄 Settings reset to defaults.');
+  } catch (err) { showStatus(`❌ Reset failed: ${err.message}`, true); }
 }
 window.resetDefaults = resetDefaults;
 
@@ -214,6 +246,7 @@ window.resetDefaults = resetDefaults;
 // Import / Export
 // ---------------------------------------------------------------------------
 async function exportSettings() {
+  try {
   const data = await browser.storage.local.get(EXPORT_KEYS);
   // Include defaults for any missing keys so the export is always complete
   const exportData = {};
@@ -221,7 +254,7 @@ async function exportSettings() {
     exportData[key] = data[key] !== undefined ? data[key] : DEFAULTS[key];
   }
   exportData._exportedAt = new Date().toISOString();
-  exportData._version = '1.2.0';
+  exportData._version = browser.runtime.getManifest().version;
 
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -232,8 +265,9 @@ async function exportSettings() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showStatus('📤 Settings exported.');
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showStatus('📤 Saved settings exported.');
+  } catch (err) { showStatus(`❌ Export failed: ${err.message}`, true); }
 }
 window.exportSettings = exportSettings;
 
@@ -245,7 +279,7 @@ async function importSettings(event) {
     const text = await file.text();
     const data = JSON.parse(text);
 
-    if (typeof data !== 'object' || data === null) {
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
       throw new Error('Invalid file format.');
     }
 
@@ -263,11 +297,29 @@ async function importSettings(event) {
       throw new Error('No recognizable settings found in the file.');
     }
 
+    for (const key of ['username', 'password', 'scriptUrl', 'secret', 'ntfyTopic']) {
+      if (key in patch && typeof patch[key] !== 'string') throw new Error(`Invalid ${key}.`);
+    }
+    const existing = await browser.storage.local.get(SETTINGS_KEYS);
+    const merged = { ...DEFAULTS, ...existing, ...patch };
+    validateSchedule(merged.scheduleMode, merged.scheduleStart, merged.scheduleEnd, merged.scheduleInterval, merged.scheduleTimes);
+    if (merged.scheduleMode === 'simple' && ['scheduleMode', 'scheduleStart', 'scheduleEnd', 'scheduleInterval'].some(key => key in patch)) {
+      const [h, m] = merged.scheduleStart.split(':').map(Number);
+      const [eh, em] = merged.scheduleEnd.split(':').map(Number);
+      patch.scheduleTimes = [];
+      for (let minute = h * 60 + m; minute <= eh * 60 + em; minute += merged.scheduleInterval) {
+        patch.scheduleTimes.push(`${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
+      }
+    } else if ('scheduleTimes' in patch) {
+      if (!Array.isArray(patch.scheduleTimes) || !patch.scheduleTimes.length || !patch.scheduleTimes.every(isValidTime)) throw new Error('Invalid schedule times.');
+      patch.scheduleTimes = [...patch.scheduleTimes].sort();
+    }
+
     // Apply to storage
     await browser.storage.local.set(patch);
     // Reload the UI to reflect imported values
     await loadSettings();
-    showStatus(`📥 Imported ${importedCount} setting(s). Click Save to confirm.`);
+    showStatus(`📥 Imported ${importedCount} setting(s).`);
   } catch (err) {
     showStatus(`❌ Import failed: ${err.message}`, true);
   }
@@ -280,11 +332,13 @@ window.importSettings = importSettings;
 // ---------------------------------------------------------------------------
 // Status message
 // ---------------------------------------------------------------------------
+let statusTimer;
 function showStatus(text, isError) {
+  clearTimeout(statusTimer);
   statusEl.textContent = text;
   statusEl.className = isError ? 'error' : '';
   if (!isError) {
-    setTimeout(() => {
+    statusTimer = setTimeout(() => {
       statusEl.textContent = '';
     }, 3000);
   }
@@ -293,4 +347,12 @@ function showStatus(text, isError) {
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
-loadSettings();
+$('modeSimple').addEventListener('click', () => setScheduleMode('simple'));
+$('modeAdvanced').addEventListener('click', () => setScheduleMode('advanced'));
+$('addTimeSlot').addEventListener('click', addTimeSlot);
+$('saveAll').addEventListener('click', saveAll);
+$('resetDefaults').addEventListener('click', resetDefaults);
+$('exportSettings').addEventListener('click', exportSettings);
+$('importSettings').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', importSettings);
+loadSettings().catch(err => showStatus(`❌ Could not load settings: ${err.message}`, true));
